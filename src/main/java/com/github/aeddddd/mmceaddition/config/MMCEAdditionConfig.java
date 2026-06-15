@@ -25,6 +25,12 @@ public class MMCEAdditionConfig {
     @Config.LangKey("config.mmceaddition.enable_me_fluid_bus_compat")
     public static boolean enableMEFluidBusCompat = true;
 
+    @Config.Name("injection_interval")
+    @Config.Comment("异步输出总线向 ME 网络批量注入的间隔（tick）。值越大，ME 网格压力越小，但产出进入网络的延迟越高。默认 5，最小 1，最大 1200。")
+    @Config.RangeInt(min = 1, max = 1200)
+    @Config.LangKey("config.mmceaddition.injection_interval")
+    public static int injectionInterval = 5;
+
     @SubscribeEvent
     public static void onConfigChanged(ConfigChangedEvent.OnConfigChangedEvent event) {
         if (MMCEAddition.MODID.equals(event.getModID())) {

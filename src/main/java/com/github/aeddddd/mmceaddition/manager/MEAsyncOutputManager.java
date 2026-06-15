@@ -15,6 +15,7 @@ import appeng.fluids.util.AEFluidStack;
 import appeng.me.GridAccessException;
 import appeng.util.Platform;
 import appeng.util.item.AEItemStack;
+import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncFluidOutputHatch;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
 import com.github.aeddddd.mmceaddition.util.ItemVariant;
@@ -55,6 +56,8 @@ public enum MEAsyncOutputManager {
     private final IItemStorageChannel itemChannel = AEApi.instance().storage().getStorageChannel(IItemStorageChannel.class);
     private final IFluidStorageChannel fluidChannel = AEApi.instance().storage().getStorageChannel(IFluidStorageChannel.class);
 
+    private int tickCounter = 0;
+
     public void register(TileMEAsyncItemOutputBus bus) {
         itemBuses.add(bus);
     }
@@ -91,6 +94,11 @@ public enum MEAsyncOutputManager {
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+        tickCounter++;
+        int interval = Math.max(1, MMCEAdditionConfig.injectionInterval);
+        if (tickCounter % interval != 0) {
             return;
         }
         processItemOutputs();
