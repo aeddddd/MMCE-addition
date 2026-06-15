@@ -31,7 +31,7 @@ Only github now, but If you have needs, i can consider uploading cf
 ## 其他
 Q:为什么制作这个模组?
 
-A:通过对于 @shenkongsk 的 meatcraft 的邻近毕业存档分析, 我发现后期超过3000+的多方块的频繁输出是性能的问题的根源,
+A:通过对于 @shenkongsk 的 MeatballCraft 的邻近毕业存档分析, 我发现后期超过3000+的多方块的频繁输出是性能的问题的根源,
 事实上, 即使使用了ME机械输出总线, 也同样存在问题, 于是我制作了这个mod. 当然, `Long` 的缓存上限需求也是他所提出的.
 
 Q:配方问题?
