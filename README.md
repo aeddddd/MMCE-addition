@@ -5,20 +5,12 @@
 
 ## 功能
 
-- **ME 异步物品输出总线** (`me_async_item_output_bus`)
-- **ME 异步流体输出仓** (`me_async_fluid_output_hatch`)
-- 内部缓存支持 `Long` 数量上限
-- 按 AE 网格批量注入，避免每个方块都注册为 `IGridTickable`
-- 在大规模工厂（数千台 MMCE 多方块）下显著降低 AE 网格 tick 开销
-- Mixin 兼容原 MMCE ME 输出总线结构位置，默认启用，可在配置中关闭
+添加了两个仓室:ME异步物品输出总线和ME异步流体输出仓,并且允许替换任意输出仓室为该仓室.这两个仓室是为了在极多 MMCE 的多方块的整合包内提供较好的性能
 
-## 构建
-
-```bash
-./gradlew build
-```
-
-构建产物位于 `build/libs/`。
+Two warehouses have been added: ME asynchronous article output bus and ME asynchronous 
+fluid output warehouse, and it is allowed to replace any output warehouse as the warehouse.
+These two warehouses are designed to provide better performance in the integration package 
+of very many MMCE multi-party blocks
 
 ## 依赖
 
@@ -27,6 +19,25 @@
 - ModularMachinery Community Edition
 - AE2 Unofficial Extended Life
 
-## 授权
+## 未来更新计划
+暂无,当然你可以向我提出需求,不保证一定会实现
 
-待定
+
+## 下载 Download
+目前仅 github ,如果你存在需求, 可以考虑上传cf
+
+Only github now, but If you have needs, i can consider uploading cf
+
+## 其他
+Q:为什么制作这个模组?
+
+A:通过对于 @shenkongsk 的 meatcraft 的邻近毕业存档分析, 我发现后期超过3000+的多方块的频繁输出是性能的问题的根源,
+事实上, 即使使用了ME机械输出总线, 也同样存在问题, 于是我制作了这个mod. 当然, `Long` 的缓存上限需求也是他所提出的.
+
+Q:配方问题?
+
+A:自行通过crt添加
+
+Q:在整合包使用?
+
+A:随意
