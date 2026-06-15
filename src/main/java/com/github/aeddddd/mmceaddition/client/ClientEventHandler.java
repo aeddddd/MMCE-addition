@@ -41,24 +41,19 @@ public class ClientEventHandler {
         Item item = stack.getItem();
         List<String> tooltip = event.getToolTip();
         if (item == Item.getItemFromBlock(RegistryHandler.ME_ASYNC_ITEM_OUTPUT_BUS)) {
-            addAsyncBusTooltip(tooltip, "tooltip.mmceaddition.me_async_item_output_bus");
+            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_async_item_output_bus");
         } else if (item == Item.getItemFromBlock(RegistryHandler.ME_ASYNC_FLUID_OUTPUT_HATCH)) {
-            addAsyncBusTooltip(tooltip, "tooltip.mmceaddition.me_async_fluid_output_hatch");
+            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_async_fluid_output_hatch");
         }
     }
 
-    private static void addAsyncBusTooltip(List<String> tooltip, String baseKey) {
-        String desc = I18n.format(baseKey);
-        if (!desc.equals(baseKey)) {
-            tooltip.add(desc);
-        }
-        String interval = I18n.format(baseKey + ".interval", MMCEAdditionConfig.injectionInterval);
-        if (!interval.equals(baseKey + ".interval")) {
-            tooltip.add(interval);
-        }
-        String performance = I18n.format(baseKey + ".performance");
-        if (!performance.equals(baseKey + ".performance")) {
-            tooltip.add(performance);
+    private static void addMultiLineTooltip(List<String> tooltip, String baseKey) {
+        for (int i = 0; i < 4; i++) {
+            String key = baseKey + ".line" + i;
+            String text = I18n.format(key, MMCEAdditionConfig.injectionInterval);
+            if (!text.equals(key)) {
+                tooltip.add(text);
+            }
         }
     }
 }

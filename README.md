@@ -28,7 +28,7 @@ of very many MMCE multi-party blocks
 
 Only github now, but If you have needs, i can consider uploading cf
 
-## 其他
+## 其他 Q&A
 Q:为什么制作这个模组?
 
 A:通过对于 @shenkongsk 的 MeatballCraft 的邻近毕业存档分析, 我发现后期超过3000+的多方块的频繁输出是性能的问题的根源,
@@ -41,3 +41,9 @@ A:自行通过crt添加
 Q:在整合包使用?
 
 A:随意
+
+Q:是否存在办法批量替换之前的ME机械输出总线?
+
+A:`/mmceaddition replaceMeItemBus` 需要权限,遍历已加载区块.把所有 MEItemOutputBus 替换为
+TileMEAsyncItemOutputBus 替换前读取原仓的 IOInventory 内容,转移进异步缓冲, 注意, 这是性能测试
+指令, 使用后果自负.
