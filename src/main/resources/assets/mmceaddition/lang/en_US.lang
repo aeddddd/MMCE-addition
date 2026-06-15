@@ -6,3 +6,4 @@ config.mmceaddition.enable_me_item_bus_compat=Compat Item Output Bus Positions
 config.mmceaddition.enable_me_fluid_bus_compat=Compat Fluid Output Hatch Positions
 tooltip.mmceaddition.me_async_item_output_bus=Asynchronously outputs items to the ME network.
 tooltip.mmceaddition.me_async_fluid_output_hatch=Asynchronously outputs fluids to the ME network.
+commands.mmceaddition.replaceMeItemBus.success=Replaced %d ME item output buses, transferred %d items.

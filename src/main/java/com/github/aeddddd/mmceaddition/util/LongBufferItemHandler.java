@@ -17,6 +17,11 @@ public class LongBufferItemHandler implements IItemHandlerModifiable {
         this.buffer = buffer;
     }
 
+    /**
+     * 缓冲区内部使用 Map 按物品变体聚合，不暴露为多个独立槽位。
+     * 返回 1 表示所有输出都通过单一入口进入缓冲区，由 {@link LongItemBuffer} 自行合并同类物品。
+     * 这种设计对 MMCE 配方输出是 O(1) 的，不需要按槽位顺序查找。
+     */
     @Override
     public int getSlots() {
         return 1;

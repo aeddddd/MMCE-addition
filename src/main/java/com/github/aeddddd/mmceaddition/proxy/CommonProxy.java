@@ -2,12 +2,14 @@ package com.github.aeddddd.mmceaddition.proxy;
 
 import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
+import com.github.aeddddd.mmceaddition.command.CommandMMCEAddition;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.config.ConfigManager;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 
 /**
  * 公共代理。
@@ -24,5 +26,9 @@ public class CommonProxy {
     }
 
     public void postInit(FMLPostInitializationEvent event) {
+    }
+
+    public void onServerStarting(FMLServerStartingEvent event) {
+        event.registerServerCommand(new CommandMMCEAddition());
     }
 }
