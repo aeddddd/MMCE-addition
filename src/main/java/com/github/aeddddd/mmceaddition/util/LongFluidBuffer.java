@@ -17,6 +17,15 @@ import java.util.Map;
 public class LongFluidBuffer {
 
     private final Map<Fluid, Long> storage = new HashMap<>();
+    private final IBufferObserver observer;
+
+    public LongFluidBuffer() {
+        this(null);
+    }
+
+    public LongFluidBuffer(IBufferObserver observer) {
+        this.observer = observer;
+    }
 
     /**
      * 向缓冲区填充流体，返回实际填充的 mB 数量。
@@ -25,6 +34,7 @@ public class LongFluidBuffer {
         if (resource == null || resource.amount <= 0) {
             return 0;
         }
+        boolean wasEmpty = storage.isEmpty();
         Fluid fluid = resource.getFluid();
         long current = storage.getOrDefault(fluid, 0L);
         long amount = resource.amount;
@@ -36,6 +46,9 @@ public class LongFluidBuffer {
         }
         if (doFill) {
             storage.put(fluid, next);
+            if (wasEmpty && !storage.isEmpty() && observer != null) {
+                observer.onBufferNonEmpty();
+            }
         }
         return (int) accepted;
     }

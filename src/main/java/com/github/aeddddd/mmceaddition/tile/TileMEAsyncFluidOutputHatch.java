@@ -12,6 +12,7 @@ import appeng.me.helpers.IGridProxyable;
 import appeng.me.helpers.MachineSource;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
+import com.github.aeddddd.mmceaddition.util.IBufferObserver;
 import com.github.aeddddd.mmceaddition.util.LongBufferFluidHandler;
 import com.github.aeddddd.mmceaddition.util.LongFluidBuffer;
 import hellfirepvp.modularmachinery.common.machine.IOType;
@@ -32,9 +33,9 @@ import javax.annotation.Nullable;
  * ME 异步流体输出仓 TileEntity。
  */
 public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
-        implements MachineComponentTile, IActionHost, IGridProxyable {
+        implements MachineComponentTile, IActionHost, IGridProxyable, IBufferObserver {
 
-    private final LongFluidBuffer fluidBuffer = new LongFluidBuffer();
+    private final LongFluidBuffer fluidBuffer = new LongFluidBuffer(this);
     private final LongBufferFluidHandler fluidHandler = new LongBufferFluidHandler(fluidBuffer);
     private final AENetworkProxy proxy;
     private final IActionSource source;
@@ -150,6 +151,13 @@ public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
 
     public IActionSource getSource() {
         return source;
+    }
+
+    @Override
+    public void onBufferNonEmpty() {
+        if (world != null && !world.isRemote) {
+            MEAsyncOutputManager.INSTANCE.markDirty(this);
+        }
     }
 
     @Override

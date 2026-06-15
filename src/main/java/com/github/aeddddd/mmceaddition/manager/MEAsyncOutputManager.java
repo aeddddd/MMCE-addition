@@ -35,6 +35,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * 异步 ME 输出管理器。
  * <p>
  * 统一管理所有 ME 异步输出方块，按 AE 网格分组批量注入，避免每个方块都注册为 IGridTickable。
+ * <p>
+ * 性能优化：只处理缓冲区非空（dirty）的方块，而不是每 tick 扫描全部注册方块。
  */
 public enum MEAsyncOutputManager {
     INSTANCE;
@@ -44,11 +46,14 @@ public enum MEAsyncOutputManager {
     private final Set<TileMEAsyncItemOutputBus> itemBuses = ConcurrentHashMap.newKeySet();
     private final Set<TileMEAsyncFluidOutputHatch> fluidHatches = ConcurrentHashMap.newKeySet();
 
+    /**
+     * 待处理集合：只有缓冲区非空的 tile 才会进入这里。
+     */
+    private final Set<TileMEAsyncItemOutputBus> dirtyItemBuses = ConcurrentHashMap.newKeySet();
+    private final Set<TileMEAsyncFluidOutputHatch> dirtyFluidHatches = ConcurrentHashMap.newKeySet();
+
     private final IItemStorageChannel itemChannel = AEApi.instance().storage().getStorageChannel(IItemStorageChannel.class);
     private final IFluidStorageChannel fluidChannel = AEApi.instance().storage().getStorageChannel(IFluidStorageChannel.class);
-
-    private int itemCursor = 0;
-    private int fluidCursor = 0;
 
     public void register(TileMEAsyncItemOutputBus bus) {
         itemBuses.add(bus);
@@ -56,6 +61,7 @@ public enum MEAsyncOutputManager {
 
     public void unregister(TileMEAsyncItemOutputBus bus) {
         itemBuses.remove(bus);
+        dirtyItemBuses.remove(bus);
     }
 
     public void register(TileMEAsyncFluidOutputHatch hatch) {
@@ -64,6 +70,22 @@ public enum MEAsyncOutputManager {
 
     public void unregister(TileMEAsyncFluidOutputHatch hatch) {
         fluidHatches.remove(hatch);
+        dirtyFluidHatches.remove(hatch);
+    }
+
+    /**
+     * 当缓冲区从空变为非空时由 Tile 调用。
+     */
+    public void markDirty(TileMEAsyncItemOutputBus bus) {
+        if (itemBuses.contains(bus)) {
+            dirtyItemBuses.add(bus);
+        }
+    }
+
+    public void markDirty(TileMEAsyncFluidOutputHatch hatch) {
+        if (fluidHatches.contains(hatch)) {
+            dirtyFluidHatches.add(hatch);
+        }
     }
 
     @SubscribeEvent
@@ -76,21 +98,23 @@ public enum MEAsyncOutputManager {
     }
 
     private void processItemOutputs() {
-        List<TileMEAsyncItemOutputBus> snapshot = getValidItemBuses();
-        if (snapshot.isEmpty()) {
+        if (dirtyItemBuses.isEmpty()) {
             return;
         }
 
-        int total = snapshot.size();
-        int limit = Math.min(MAX_TILES_PER_TICK, total);
-        int start = itemCursor % total;
-
         Map<IGrid, List<TileMEAsyncItemOutputBus>> gridMap = new HashMap<>();
         int collected = 0;
-        for (int i = 0; i < total && collected < limit; i++) {
-            int index = (start + i) % total;
-            TileMEAsyncItemOutputBus bus = snapshot.get(index);
+
+        Iterator<TileMEAsyncItemOutputBus> it = dirtyItemBuses.iterator();
+        while (it.hasNext() && collected < MAX_TILES_PER_TICK) {
+            TileMEAsyncItemOutputBus bus = it.next();
+            if (!isValid(bus)) {
+                it.remove();
+                itemBuses.remove(bus);
+                continue;
+            }
             if (bus.getItemBuffer().isEmpty()) {
+                it.remove();
                 continue;
             }
             try {
@@ -98,12 +122,21 @@ public enum MEAsyncOutputManager {
                 gridMap.computeIfAbsent(grid, k -> new ArrayList<>()).add(bus);
                 collected++;
             } catch (GridAccessException ignored) {
+                // 尚未连接到网格，保留在 dirty 集合中等待下次尝试
             }
         }
-        itemCursor = (start + collected) % Math.max(total, 1);
 
         for (Map.Entry<IGrid, List<TileMEAsyncItemOutputBus>> entry : gridMap.entrySet()) {
             processItemGrid(entry.getKey(), entry.getValue());
+        }
+
+        // 处理完后清空已处理且缓冲区为空的 tile
+        for (List<TileMEAsyncItemOutputBus> buses : gridMap.values()) {
+            for (TileMEAsyncItemOutputBus bus : buses) {
+                if (bus.getItemBuffer().isEmpty()) {
+                    dirtyItemBuses.remove(bus);
+                }
+            }
         }
     }
 
@@ -148,21 +181,23 @@ public enum MEAsyncOutputManager {
     }
 
     private void processFluidOutputs() {
-        List<TileMEAsyncFluidOutputHatch> snapshot = getValidFluidHatches();
-        if (snapshot.isEmpty()) {
+        if (dirtyFluidHatches.isEmpty()) {
             return;
         }
 
-        int total = snapshot.size();
-        int limit = Math.min(MAX_TILES_PER_TICK, total);
-        int start = fluidCursor % total;
-
         Map<IGrid, List<TileMEAsyncFluidOutputHatch>> gridMap = new HashMap<>();
         int collected = 0;
-        for (int i = 0; i < total && collected < limit; i++) {
-            int index = (start + i) % total;
-            TileMEAsyncFluidOutputHatch hatch = snapshot.get(index);
+
+        Iterator<TileMEAsyncFluidOutputHatch> it = dirtyFluidHatches.iterator();
+        while (it.hasNext() && collected < MAX_TILES_PER_TICK) {
+            TileMEAsyncFluidOutputHatch hatch = it.next();
+            if (!isValid(hatch)) {
+                it.remove();
+                fluidHatches.remove(hatch);
+                continue;
+            }
             if (hatch.getFluidBuffer().isEmpty()) {
+                it.remove();
                 continue;
             }
             try {
@@ -172,10 +207,17 @@ public enum MEAsyncOutputManager {
             } catch (GridAccessException ignored) {
             }
         }
-        fluidCursor = (start + collected) % Math.max(total, 1);
 
         for (Map.Entry<IGrid, List<TileMEAsyncFluidOutputHatch>> entry : gridMap.entrySet()) {
             processFluidGrid(entry.getKey(), entry.getValue());
+        }
+
+        for (List<TileMEAsyncFluidOutputHatch> hatches : gridMap.values()) {
+            for (TileMEAsyncFluidOutputHatch hatch : hatches) {
+                if (hatch.getFluidBuffer().isEmpty()) {
+                    dirtyFluidHatches.remove(hatch);
+                }
+            }
         }
     }
 
@@ -219,40 +261,11 @@ public enum MEAsyncOutputManager {
         }
     }
 
-    private List<TileMEAsyncItemOutputBus> getValidItemBuses() {
-        List<TileMEAsyncItemOutputBus> list = new ArrayList<>();
-        Iterator<TileMEAsyncItemOutputBus> it = itemBuses.iterator();
-        while (it.hasNext()) {
-            TileMEAsyncItemOutputBus bus = it.next();
-            if (isValid(bus)) {
-                list.add(bus);
-            } else {
-                it.remove();
-            }
-        }
-        return list;
-    }
-
-    private List<TileMEAsyncFluidOutputHatch> getValidFluidHatches() {
-        List<TileMEAsyncFluidOutputHatch> list = new ArrayList<>();
-        Iterator<TileMEAsyncFluidOutputHatch> it = fluidHatches.iterator();
-        while (it.hasNext()) {
-            TileMEAsyncFluidOutputHatch hatch = it.next();
-            if (isValid(hatch)) {
-                list.add(hatch);
-            } else {
-                it.remove();
-            }
-        }
-        return list;
-    }
-
+    /**
+     * 简化有效性检查：依赖 invalidate/onChunkUnload 正常注销。
+     * 不再每 tick 调用 world.getTileEntity(pos) 做二次校验。
+     */
     private boolean isValid(TileEntity tile) {
-        if (tile == null || tile.isInvalid()) {
-            return false;
-        }
-        World world = tile.getWorld();
-        BlockPos pos = tile.getPos();
-        return world != null && world.isBlockLoaded(pos) && world.getTileEntity(pos) == tile;
+        return tile != null && !tile.isInvalid();
     }
 }

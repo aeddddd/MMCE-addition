@@ -15,6 +15,15 @@ import java.util.Map;
 public class LongItemBuffer {
 
     private final Map<ItemVariant, Long> storage = new HashMap<>();
+    private final IBufferObserver observer;
+
+    public LongItemBuffer() {
+        this(null);
+    }
+
+    public LongItemBuffer(IBufferObserver observer) {
+        this.observer = observer;
+    }
 
     /**
      * 向缓冲区插入物品，返回未能插入的部分（正常情况为空）。
@@ -27,6 +36,7 @@ public class LongItemBuffer {
         if (stack.isEmpty()) {
             return ItemStack.EMPTY;
         }
+        boolean wasEmpty = storage.isEmpty();
         ItemVariant variant = new ItemVariant(stack);
         long count = stack.getCount();
         long current = storage.getOrDefault(variant, 0L);
@@ -37,10 +47,18 @@ public class LongItemBuffer {
             storage.put(variant, Long.MAX_VALUE);
             ItemStack remainder = stack.copy();
             remainder.setCount((int) (count - accepted));
+            notifyIfNonEmpty(wasEmpty);
             return remainder;
         }
         storage.put(variant, next);
+        notifyIfNonEmpty(wasEmpty);
         return ItemStack.EMPTY;
+    }
+
+    private void notifyIfNonEmpty(boolean wasEmpty) {
+        if (wasEmpty && !storage.isEmpty() && observer != null) {
+            observer.onBufferNonEmpty();
+        }
     }
 
     /**

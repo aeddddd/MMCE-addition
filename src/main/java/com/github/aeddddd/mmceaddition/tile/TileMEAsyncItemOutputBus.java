@@ -13,6 +13,7 @@ import appeng.me.helpers.IGridProxyable;
 import appeng.me.helpers.MachineSource;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
+import com.github.aeddddd.mmceaddition.util.IBufferObserver;
 import com.github.aeddddd.mmceaddition.util.LongBufferItemHandler;
 import com.github.aeddddd.mmceaddition.util.LongItemBuffer;
 import hellfirepvp.modularmachinery.common.machine.IOType;
@@ -35,9 +36,9 @@ import javax.annotation.Nullable;
  * ME 异步物品输出总线 TileEntity。
  */
 public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
-        implements MachineComponentTile, IActionHost, IGridProxyable {
+        implements MachineComponentTile, IActionHost, IGridProxyable, IBufferObserver {
 
-    private final LongItemBuffer itemBuffer = new LongItemBuffer();
+    private final LongItemBuffer itemBuffer = new LongItemBuffer(this);
     private final LongBufferItemHandler itemHandler = new LongBufferItemHandler(itemBuffer);
     private final AENetworkProxy proxy;
     private final IActionSource source;
@@ -153,6 +154,13 @@ public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
 
     public IActionSource getSource() {
         return source;
+    }
+
+    @Override
+    public void onBufferNonEmpty() {
+        if (world != null && !world.isRemote) {
+            MEAsyncOutputManager.INSTANCE.markDirty(this);
+        }
     }
 
     @Override
