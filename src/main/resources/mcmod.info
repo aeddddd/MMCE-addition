@@ -1,0 +1,16 @@
+[
+  {
+    "modid": "mmceaddition",
+    "name": "MMCE Addition",
+    "description": "Async ME output components for ModularMachinery Community Edition.",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "url": "",
+    "updateUrl": "",
+    "authorList": ["aeddddd"],
+    "credits": "",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": ["modularmachinery", "appliedenergistics2"]
+  }
+]

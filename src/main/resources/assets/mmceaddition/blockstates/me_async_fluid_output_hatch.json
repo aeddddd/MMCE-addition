@@ -1,0 +1,6 @@
+{
+  "variants": {
+    "normal": { "model": "mmceaddition:me_async_fluid_output_hatch" },
+    "inventory": { "model": "mmceaddition:me_async_fluid_output_hatch" }
+  }
+}

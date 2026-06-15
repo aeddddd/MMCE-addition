@@ -1,0 +1,76 @@
+buildscript {
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net' }
+        maven { url = 'https://repo.spongepowered.org/maven' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle.forge'
+
+version = '1.0-SNAPSHOT'
+group = 'com.github.aeddddd'
+archivesBaseName = 'MMCE-addition'
+
+sourceCompatibility = targetCompatibility = '1.8'
+compileJava {
+    sourceCompatibility = targetCompatibility = '1.8'
+    options.encoding = 'UTF-8'
+}
+compileTestJava {
+    options.encoding = 'UTF-8'
+}
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+minecraft {
+    version = '1.12.2-14.23.5.2847'
+    mappings = 'stable_39'
+    runDir = 'run'
+    makeObfSourceJar = false
+}
+
+repositories {
+    flatDir {
+        dirs 'libs'
+    }
+    mavenCentral()
+    maven { url = 'https://repo.spongepowered.org/maven' }
+}
+
+dependencies {
+    // MMCE 与 AE2UEL 本地依赖，使用 deobfCompile 反混淆
+    deobfCompile name: 'ModularMachinery-CE-2.2.2'
+    deobfCompile name: 'ae2-uel-v0.56.7'
+
+    // Mixin 编译期依赖（运行时由 MixinBooter 提供）
+    compileOnly 'org.spongepowered:mixin:0.8.7'
+    annotationProcessor 'org.spongepowered:mixin:0.8.7:processor'
+
+    // 测试框架
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.10.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.0'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+processResources {
+    inputs.property 'version', project.version
+    inputs.property 'mcversion', project.minecraft.version
+
+    from(sourceSets.main.resources.srcDirs) {
+        include 'mcmod.info'
+        expand 'version': project.version, 'mcversion': project.minecraft.version
+    }
+
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'mcmod.info'
+    }
+}

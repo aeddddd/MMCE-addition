@@ -1,0 +1,12 @@
+{
+  "package": "com.github.aeddddd.mmceaddition.mixin",
+  "minVersion": "0.7",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "BlockInformationMixin"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

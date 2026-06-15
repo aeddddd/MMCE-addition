@@ -1,0 +1,6 @@
+{
+  "variants": {
+    "normal": { "model": "mmceaddition:me_async_item_output_bus" },
+    "inventory": { "model": "mmceaddition:me_async_item_output_bus" }
+  }
+}

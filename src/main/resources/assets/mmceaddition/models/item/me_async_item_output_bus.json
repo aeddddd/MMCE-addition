@@ -1,0 +1,6 @@
+{
+  "parent": "item/generated",
+  "textures": {
+    "layer0": "mmceaddition:items/me_async_item_output_bus"
+  }
+}

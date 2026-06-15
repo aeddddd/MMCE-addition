@@ -1,0 +1,8 @@
+tile.mmceaddition.me_async_item_output_bus.name=ME 异步物品输出总线
+tile.mmceaddition.me_async_fluid_output_hatch.name=ME 异步流体输出仓
+itemGroup.mmceaddition=MMCE 扩展
+config.mmceaddition.title=MMCE Addition 配置
+config.mmceaddition.enable_me_item_bus_compat=兼容各类物品输出总线位置
+config.mmceaddition.enable_me_fluid_bus_compat=兼容各类流体输出仓位置
+tooltip.mmceaddition.me_async_item_output_bus=异步向 ME 网络输出物品。
+tooltip.mmceaddition.me_async_fluid_output_hatch=异步向 ME 网络输出流体。
