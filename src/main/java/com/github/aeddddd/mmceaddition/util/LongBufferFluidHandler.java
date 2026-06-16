@@ -15,6 +15,11 @@ import java.util.Map;
  */
 public class LongBufferFluidHandler implements IFluidHandler {
 
+    /**
+     * 与原版 MMCE ME 流体输出仓保持一致的可视槽位数。
+     */
+    private static final int VISIBLE_TANKS = 9;
+
     private final LongFluidBuffer buffer;
 
     public LongBufferFluidHandler(LongFluidBuffer buffer) {
@@ -25,15 +30,21 @@ public class LongBufferFluidHandler implements IFluidHandler {
     public IFluidTankProperties[] getTankProperties() {
         Map<Fluid, Long> snapshot = buffer.snapshot();
         if (snapshot.isEmpty()) {
-            return new IFluidTankProperties[]{
-                    new FluidTankProperties(null, Integer.MAX_VALUE)
-            };
+            IFluidTankProperties[] props = new IFluidTankProperties[VISIBLE_TANKS];
+            for (int i = 0; i < VISIBLE_TANKS; i++) {
+                props[i] = new FluidTankProperties(null, Integer.MAX_VALUE);
+            }
+            return props;
         }
-        IFluidTankProperties[] props = new IFluidTankProperties[snapshot.size()];
+        IFluidTankProperties[] props = new IFluidTankProperties[VISIBLE_TANKS];
         int i = 0;
         for (Map.Entry<Fluid, Long> entry : snapshot.entrySet()) {
             FluidStack content = new FluidStack(entry.getKey(), (int) Math.min(entry.getValue(), Integer.MAX_VALUE));
             props[i++] = new FluidTankProperties(content, Integer.MAX_VALUE);
+            if (i >= VISIBLE_TANKS) break;
+        }
+        while (i < VISIBLE_TANKS) {
+            props[i++] = new FluidTankProperties(null, Integer.MAX_VALUE);
         }
         return props;
     }
