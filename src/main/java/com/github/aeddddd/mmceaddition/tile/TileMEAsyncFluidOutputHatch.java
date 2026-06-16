@@ -7,6 +7,7 @@ import appeng.api.networking.security.IActionSource;
 import appeng.api.util.AECableType;
 import appeng.api.util.AEPartLocation;
 import appeng.api.util.DimensionalCoord;
+import appeng.me.GridAccessException;
 import appeng.me.helpers.AENetworkProxy;
 import appeng.me.helpers.IGridProxyable;
 import appeng.me.helpers.MachineSource;
@@ -31,6 +32,8 @@ import javax.annotation.Nullable;
 
 /**
  * ME 异步流体输出仓 TileEntity。
+ * <p>
+ * 与 {@link TileMEAsyncItemOutputBus} 对应，处理流体输出。
  */
 public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
         implements MachineComponentTile, IActionHost, IGridProxyable, IBufferObserver {
@@ -154,13 +157,6 @@ public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
     }
 
     @Override
-    public void onBufferNonEmpty() {
-        if (world != null && !world.isRemote) {
-            MEAsyncOutputManager.INSTANCE.markDirty(this);
-        }
-    }
-
-    @Override
     public boolean hasCapability(@Nonnull Capability<?> capability, @Nullable EnumFacing facing) {
         return capability == CapabilityFluidHandler.FLUID_HANDLER_CAPABILITY || super.hasCapability(capability, facing);
     }
@@ -202,5 +198,12 @@ public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
 
     public void readBufferFromNBT(NBTTagCompound compound) {
         fluidBuffer.readFromNBT(compound);
+    }
+
+    @Override
+    public void onBufferNonEmpty() {
+        if (world != null && !world.isRemote) {
+            MEAsyncOutputManager.INSTANCE.markDirty(this);
+        }
     }
 }

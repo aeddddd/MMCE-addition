@@ -6,12 +6,12 @@ import com.github.aeddddd.mmceaddition.tile.TileMEAsyncFluidOutputHatch;
 import hellfirepvp.modularmachinery.common.block.BlockMachineComponent;
 import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
-import net.minecraft.util.BlockRenderLayer;
-import net.minecraft.util.EnumBlockRenderType;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.BlockRenderLayer;
+import net.minecraft.util.EnumBlockRenderType;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.EnumHand;
 import net.minecraft.util.NonNullList;
@@ -25,6 +25,8 @@ import javax.annotation.Nullable;
 
 /**
  * ME 异步流体输出仓方块。
+ * <p>
+ * 与 {@link BlockMEAsyncItemOutputBus} 类似，但处理流体输出。
  */
 public class BlockMEAsyncFluidOutputHatch extends BlockMachineComponent {
 

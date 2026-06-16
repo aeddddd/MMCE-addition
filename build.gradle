@@ -1,23 +1,34 @@
+// ============================================================
+// ForgeGradle 2.3 构建脚本（适用于 Minecraft 1.12.2）
+// ============================================================
+// buildscript 块定义构建脚本本身的依赖，包括 ForgeGradle 插件。
 buildscript {
     repositories {
+        // Forge 官方 Maven 仓库，提供 ForgeGradle。
         maven { url = 'https://maven.minecraftforge.net' }
+        // SpongePowered Maven 仓库，提供 Mixin 相关依赖。
         maven { url = 'https://repo.spongepowered.org/maven' }
         mavenCentral()
     }
     dependencies {
+        // ForgeGradle 2.3-SNAPSHOT 是 1.12.2 常用的构建插件版本。
         classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
     }
 }
 
+// 应用 ForgeGradle 插件。
 apply plugin: 'net.minecraftforge.gradle.forge'
 
+// 模组版本、Maven 坐标、构建产物名。
 version = '1.0-SNAPSHOT'
 group = 'com.github.aeddddd'
 archivesBaseName = 'MMCE-addition'
 
+// Java 版本设置。
 sourceCompatibility = targetCompatibility = '1.8'
 compileJava {
     sourceCompatibility = targetCompatibility = '1.8'
+    // 强制使用 UTF-8 编码，避免中文注释/语言文件在 Windows 下出现乱码。
     options.encoding = 'UTF-8'
 }
 compileTestJava {
@@ -27,14 +38,21 @@ tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
 }
 
+// ForgeGradle 配置块。
 minecraft {
+    // Forge 版本：1.12.2-14.23.5.2847 是 1.12.2 的推荐版本之一。
     version = '1.12.2-14.23.5.2847'
+    // MCP 映射表版本，stable_39 是 1.12.2 的常用稳定映射。
     mappings = 'stable_39'
+    // 运行目录，./gradlew runClient 会在这里生成客户端运行环境。
     runDir = 'run'
+    // 不生成源码 jar，节省构建时间。
     makeObfSourceJar = false
 }
 
+// 仓库配置。
 repositories {
+    // flatDir 允许直接把本地 JAR 放在 libs/ 目录下作为依赖。
     flatDir {
         dirs 'libs'
     }
@@ -43,15 +61,18 @@ repositories {
 }
 
 dependencies {
-    // MMCE 与 AE2UEL 本地依赖，使用 deobfCompile 反混淆
+    // MMCE 与 AE2UEL 本地依赖，使用 deobfCompile 反混淆。
+    // deobfCompile 是 ForgeGradle 提供的配置，会把 JAR 反混淆为开发环境可读的名称。
     deobfCompile name: 'ModularMachinery-CE-2.2.2'
     deobfCompile name: 'ae2-uel-v0.56.7'
 
-    // Mixin 编译期依赖（运行时由 MixinBooter 提供）
+    // Mixin 编译期依赖（运行时由 MixinBooter 提供）。
+    // compileOnly 表示编译时需要，但不会打包进最终产物。
     compileOnly 'org.spongepowered:mixin:0.8.7'
+    // annotationProcessor 让 Mixin 注解处理器在编译时处理 @Mixin 注解。
     annotationProcessor 'org.spongepowered:mixin:0.8.7:processor'
 
-    // 测试框架
+    // 测试框架：JUnit 5。
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.0'
     testImplementation 'org.junit.jupiter:junit-jupiter-params:5.10.0'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.0'
@@ -61,15 +82,19 @@ test {
     useJUnitPlatform()
 }
 
+// 处理资源文件。
 processResources {
+    // 定义输入属性，这样当 version 变化时 Gradle 会自动重新处理资源。
     inputs.property 'version', project.version
     inputs.property 'mcversion', project.minecraft.version
 
+    // 对 mcmod.info 进行变量替换，把 ${version} 和 ${mcversion} 替换为实际值。
     from(sourceSets.main.resources.srcDirs) {
         include 'mcmod.info'
         expand 'version': project.version, 'mcversion': project.minecraft.version
     }
 
+    // 复制其他资源文件（模型、纹理、语言文件等），但不替换变量。
     from(sourceSets.main.resources.srcDirs) {
         exclude 'mcmod.info'
     }

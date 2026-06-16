@@ -9,8 +9,14 @@ import javax.annotation.Nullable;
 import java.util.Objects;
 
 /**
- * 物品变体，用于在 Long 缓冲区中作为键。
- * 包含物品类型、元数据与 NBT，保证 equals/hashCode 稳定。
+ * 物品变体。
+ * <p>
+ * 在 Minecraft 中，同一个 Item 加上不同的 metadata 或 NBT 就是不同的“物品变体”。
+ * 例如：白色羊毛和黑色羊毛是同一个 Item，但 metadata 不同；
+ * 附魔书和未附魔书 metadata 相同但 NBT 不同。
+ * <p>
+ * 本类把 Item + metadata + NBT 封装为一个值对象，重写 equals/hashCode，
+ * 使其可以作为 {@link java.util.HashMap} 的键，用于 Long 缓冲区按变体聚合数量。
  */
 public final class ItemVariant {
 
@@ -19,13 +25,20 @@ public final class ItemVariant {
     @Nullable
     private final NBTTagCompound nbt;
 
+    /**
+     * 从 ItemStack 构造变体。数量信息会被丢弃。
+     */
     public ItemVariant(@Nonnull ItemStack stack) {
         this(stack.getItem(), stack.getMetadata(), stack.getTagCompound());
     }
 
+    /**
+     * 直接指定 Item、metadata、NBT 构造变体。
+     */
     public ItemVariant(@Nonnull Item item, int metadata, @Nullable NBTTagCompound nbt) {
         this.item = item;
         this.metadata = metadata;
+        // NBT 是可变对象，这里拷贝一份防止外部修改影响 hashCode/equals。
         this.nbt = nbt == null ? null : nbt.copy();
     }
 
@@ -44,7 +57,11 @@ public final class ItemVariant {
     }
 
     /**
-     * 创建一个数量为 1 的代表性 ItemStack（用于创建 AEItemStack 等场景）。
+     * 创建一个数量为 1 的代表性 ItemStack。
+     * <p>
+     * 用于创建 AEItemStack 等只需要“是什么物品”而不需要数量的场景。
+     *
+     * @return 数量为 1 的 ItemStack
      */
     @Nonnull
     public ItemStack toSingleStack() {

@@ -35,27 +35,57 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 异步 ME 输出管理器。
  * <p>
- * 统一管理所有 ME 异步输出方块，按 AE 网格分组批量注入，避免每个方块都注册为 IGridTickable。
- * <p>
- * 性能优化：只处理缓冲区非空（dirty）的方块，而不是每 tick 扫描全部注册方块。
+ * 核心设计思想：
+ * <ul>
+ *   <li>每个异步输出方块不再单独注册为 AE2 的 IGridTickable，避免大量节点占用网格 tick。</li>
+ *   <li>所有方块把产出先缓冲到本地，然后由这个单一管理器统一调度、批量注入。</li>
+ *   <li>只处理缓冲区非空的“脏”方块，而不是每 tick 扫描所有注册方块。</li>
+ *   <li>按 AE 网格分组，每个网格每 tick 只查一次 IStorageGrid / IEnergyGrid。</li>
+ * </ul>
  */
 public enum MEAsyncOutputManager {
     INSTANCE;
 
+    /**
+     * 每 tick 最多处理的方块数上限。
+     * <p>
+     * 即使有大量脏方块，也分批处理，避免单次 tick 耗时过长。
+     */
     private static final int MAX_TILES_PER_TICK = 500;
 
+    /**
+     * 所有已注册的异步物品总线。
+     */
     private final Set<TileMEAsyncItemOutputBus> itemBuses = ConcurrentHashMap.newKeySet();
+
+    /**
+     * 所有已注册的异步流体仓。
+     */
     private final Set<TileMEAsyncFluidOutputHatch> fluidHatches = ConcurrentHashMap.newKeySet();
 
     /**
-     * 待处理集合：只有缓冲区非空的 tile 才会进入这里。
+     * 待处理的物品总线：只有缓冲区非空的 tile 才会在这里。
      */
     private final Set<TileMEAsyncItemOutputBus> dirtyItemBuses = ConcurrentHashMap.newKeySet();
+
+    /**
+     * 待处理的流体仓。
+     */
     private final Set<TileMEAsyncFluidOutputHatch> dirtyFluidHatches = ConcurrentHashMap.newKeySet();
 
+    /**
+     * AE2 物品存储通道，用于创建 IAEItemStack 和获取 IMEMonitor。
+     */
     private final IItemStorageChannel itemChannel = AEApi.instance().storage().getStorageChannel(IItemStorageChannel.class);
+
+    /**
+     * AE2 流体存储通道。
+     */
     private final IFluidStorageChannel fluidChannel = AEApi.instance().storage().getStorageChannel(IFluidStorageChannel.class);
 
+    /**
+     * 服务端 tick 计数器，用于按配置间隔批量注入。
+     */
     private int tickCounter = 0;
 
     public void register(TileMEAsyncItemOutputBus bus) {
@@ -77,7 +107,9 @@ public enum MEAsyncOutputManager {
     }
 
     /**
-     * 当缓冲区从空变为非空时由 Tile 调用。
+     * 标记某个物品总线为待处理。
+     * <p>
+     * 由 TileEntity 在缓冲区从空变非空时调用。
      */
     public void markDirty(TileMEAsyncItemOutputBus bus) {
         if (itemBuses.contains(bus)) {
@@ -91,6 +123,11 @@ public enum MEAsyncOutputManager {
         }
     }
 
+    /**
+     * 服务端 tick 事件处理器。
+     * <p>
+     * 只在 tick 阶段 END 执行，并根据配置 injectionInterval 决定本次是否注入。
+     */
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) {
@@ -105,11 +142,15 @@ public enum MEAsyncOutputManager {
         processFluidOutputs();
     }
 
+    /**
+     * 处理所有待处理的物品总线。
+     */
     private void processItemOutputs() {
         if (dirtyItemBuses.isEmpty()) {
             return;
         }
 
+        // 按 AE 网格分组，同一网格的多个总线共享一次 storage/energy 查询。
         Map<IGrid, List<TileMEAsyncItemOutputBus>> gridMap = new HashMap<>();
         int collected = 0;
 
@@ -130,7 +171,7 @@ public enum MEAsyncOutputManager {
                 gridMap.computeIfAbsent(grid, k -> new ArrayList<>()).add(bus);
                 collected++;
             } catch (GridAccessException ignored) {
-                // 尚未连接到网格，保留在 dirty 集合中等待下次尝试
+                // 尚未连接到网格，保留在 dirty 集合中等待下次尝试。
             }
         }
 
@@ -138,7 +179,7 @@ public enum MEAsyncOutputManager {
             processItemGrid(entry.getKey(), entry.getValue());
         }
 
-        // 处理完后清空已处理且缓冲区为空的 tile
+        // 处理完后，把已经清空的 tile 从 dirty 集合移除。
         for (List<TileMEAsyncItemOutputBus> buses : gridMap.values()) {
             for (TileMEAsyncItemOutputBus bus : buses) {
                 if (bus.getItemBuffer().isEmpty()) {
@@ -148,6 +189,9 @@ public enum MEAsyncOutputManager {
         }
     }
 
+    /**
+     * 处理同一网格内的所有物品总线。
+     */
     private void processItemGrid(IGrid grid, List<TileMEAsyncItemOutputBus> buses) {
         IStorageGrid storage = grid.getCache(IStorageGrid.class);
         IEnergySource energy = grid.getCache(IEnergyGrid.class);
@@ -161,10 +205,14 @@ public enum MEAsyncOutputManager {
         }
     }
 
+    /**
+     * 处理单个物品总线：把缓冲区中每种物品一次性注入 ME 网络。
+     */
     private void processItemBus(TileMEAsyncItemOutputBus bus, IMEMonitor<IAEItemStack> monitor, IEnergySource energy) {
         LongItemBuffer buffer = bus.getItemBuffer();
         IActionSource source = bus.getSource();
 
+        // 先取快照，避免在遍历过程中缓冲区被并发修改。
         Map<ItemVariant, Long> snapshot = buffer.snapshot();
         for (Map.Entry<ItemVariant, Long> entry : snapshot.entrySet()) {
             ItemVariant variant = entry.getKey();
@@ -173,13 +221,16 @@ public enum MEAsyncOutputManager {
                 continue;
             }
 
+            // 创建代表该变体的 AE 物品堆，数量为 1，然后再 setStackSize。
             IAEItemStack toInsert = AEItemStack.fromItemStack(variant.toSingleStack());
             if (toInsert == null) {
+                // 如果无法创建 AEItemStack，直接丢弃（极端情况）。
                 buffer.extract(variant, amount);
                 continue;
             }
             toInsert.setStackSize(amount);
 
+            // Platform.poweredInsert 会先扣除能量，然后把物品存入网络，返回剩余量。
             IAEItemStack leftover = Platform.poweredInsert(energy, monitor, toInsert, source);
             long inserted = amount - (leftover == null ? 0 : leftover.getStackSize());
             if (inserted > 0) {
@@ -188,6 +239,11 @@ public enum MEAsyncOutputManager {
         }
     }
 
+    /**
+     * 处理所有待处理的流体仓。
+     * <p>
+     * 逻辑与物品版对称。
+     */
     private void processFluidOutputs() {
         if (dirtyFluidHatches.isEmpty()) {
             return;
@@ -270,8 +326,10 @@ public enum MEAsyncOutputManager {
     }
 
     /**
-     * 简化有效性检查：依赖 invalidate/onChunkUnload 正常注销。
-     * 不再每 tick 调用 world.getTileEntity(pos) 做二次校验。
+     * 简化有效性检查。
+     * <p>
+     * 依赖 TileEntity 的 invalidate/onChunkUnload 正常注销。
+     * 不再每 tick 调用 world.getTileEntity(pos) 做二次校验，以减少开销。
      */
     private boolean isValid(TileEntity tile) {
         return tile != null && !tile.isInvalid();

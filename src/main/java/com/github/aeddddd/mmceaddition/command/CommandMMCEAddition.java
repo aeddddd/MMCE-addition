@@ -23,7 +23,10 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 调试/管理命令：把已加载区块中的 MMCE ME 物品输出仓替换为本模组的异步版本。
+ * 调试/管理命令。
+ * <p>
+ * 用于把已加载区块中的 MMCE 原版 ME 物品输出仓一键替换为本模组的异步版本，
+ * 方便在已有存档上测试性能差异。
  */
 public class CommandMMCEAddition extends CommandBase {
 
@@ -41,6 +44,7 @@ public class CommandMMCEAddition extends CommandBase {
 
     @Override
     public int getRequiredPermissionLevel() {
+        // 需要 OP 权限等级 2（创造模式命令通常用这个等级）。
         return 2;
     }
 
@@ -61,15 +65,20 @@ public class CommandMMCEAddition extends CommandBase {
         int replaced = 0;
         int transferred = 0;
 
+        // 只遍历已加载区块。
         if (!(world.getChunkProvider() instanceof ChunkProviderServer)) {
             sender.sendMessage(new TextComponentString("§c该维度不支持区块遍历。"));
             return;
         }
         ChunkProviderServer provider = (ChunkProviderServer) world.getChunkProvider();
+
         for (Chunk chunk : provider.getLoadedChunks()) {
+            // chunk.getTileEntityMap() 返回该区块内所有 TileEntity。
             for (TileEntity te : chunk.getTileEntityMap().values()) {
                 if (te instanceof MEItemOutputBus) {
                     BlockPos pos = te.getPos();
+
+                    // 先读取原仓内待输出的物品。
                     IOInventory inv = ((MEItemOutputBus) te).getInternalInventory();
                     ItemStack[] contents = null;
                     if (inv != null) {
@@ -80,6 +89,7 @@ public class CommandMMCEAddition extends CommandBase {
                         }
                     }
 
+                    // 替换方块。setBlockState 会自动移除旧 TileEntity 并创建新的。
                     world.setBlockState(pos, RegistryHandler.ME_ASYNC_ITEM_OUTPUT_BUS.getDefaultState(), 2);
                     TileEntity newTe = world.getTileEntity(pos);
                     if (newTe instanceof TileMEAsyncItemOutputBus && contents != null) {

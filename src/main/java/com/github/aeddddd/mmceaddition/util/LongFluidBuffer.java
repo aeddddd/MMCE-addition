@@ -13,6 +13,9 @@ import java.util.Map;
 
 /**
  * 支持 Long 数量上限的流体缓冲区。
+ * <p>
+ * 与 {@link LongItemBuffer} 对应，用 Map&lt;Fluid, Long&gt; 按流体类型聚合存储。
+ * 原版 Forge 的 IFluidTank 通常用 int 表示毫桶（mB），这里用 Long 突破上限。
  */
 public class LongFluidBuffer {
 
@@ -29,6 +32,10 @@ public class LongFluidBuffer {
 
     /**
      * 向缓冲区填充流体，返回实际填充的 mB 数量。
+     *
+     * @param resource 要填充的流体堆
+     * @param doFill   true 为真正填充，false 为模拟
+     * @return 实际填充的 mB 数
      */
     public synchronized int fill(@Nonnull FluidStack resource, boolean doFill) {
         if (resource == null || resource.amount <= 0) {
@@ -40,16 +47,20 @@ public class LongFluidBuffer {
         long amount = resource.amount;
         long next = current + amount;
         long accepted = amount;
+
         if (next < 0) {
+            // Long 溢出，只接受剩余空间。
             accepted = Long.MAX_VALUE - current;
             next = Long.MAX_VALUE;
         }
+
         if (doFill) {
             storage.put(fluid, next);
             if (wasEmpty && !storage.isEmpty() && observer != null) {
                 observer.onBufferNonEmpty();
             }
         }
+
         return (int) accepted;
     }
 
