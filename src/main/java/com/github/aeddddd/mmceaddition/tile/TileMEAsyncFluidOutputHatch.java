@@ -128,6 +128,12 @@ public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
                 MEAsyncOutputManager.INSTANCE.register(this);
                 registered = true;
             }
+            // 重进存档时，缓冲区可能已经从 NBT 恢复出非空内容，
+            // 但它不会触发 fill() 时的 onBufferNonEmpty 回调。
+            // 因此这里显式补一次 dirty 标记，避免这些产出被永久搁置。
+            if (!fluidBuffer.isEmpty()) {
+                MEAsyncOutputManager.INSTANCE.markDirty(this);
+            }
         }
     }
 
