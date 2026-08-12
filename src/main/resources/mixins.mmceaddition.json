@@ -3,7 +3,14 @@
   "minVersion": "0.7",
   "compatibilityLevel": "JAVA_8",
   "mixins": [
-    "BlockInformationMixin"
+    "BlockInformationMixin",
+    "CraftingCPUClusterMixin",
+    "MachineRegistryMixin",
+    "ParallelismControllerMixin",
+    "RecipeCraftingContextMixin",
+    "RequirementFluidMixin",
+    "RequirementIngredientArrayMixin",
+    "RequirementItemMixin"
   ],
   "client": [],
   "injectors": {

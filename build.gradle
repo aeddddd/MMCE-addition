@@ -20,7 +20,7 @@ buildscript {
 apply plugin: 'net.minecraftforge.gradle.forge'
 
 // 模组版本、Maven 坐标、构建产物名。
-version = '1.0-SNAPSHOT'
+version = '1.1beta'
 group = 'com.github.aeddddd'
 archivesBaseName = 'MMCE-addition'
 
@@ -65,6 +65,12 @@ dependencies {
     // deobfCompile 是 ForgeGradle 提供的配置，会把 JAR 反混淆为开发环境可读的名称。
     deobfCompile name: 'ModularMachinery-CE-2.2.2'
     deobfCompile name: 'ae2-uel-v0.56.7'
+    // AE2 Fluid Crafting：仅编译期引用其流体假物品 API（FakeFluids/FakeItemRegister），
+    // 运行时为可选软依赖，代码中通过 Loader.isModLoaded("ae2fc") 保护。
+    deobfCompile name: 'ae2fc-2.7.10-unofficial'
+    // GeckoLib：MMCE-CE 的传递依赖（TileMultiblockMachineController 实现了 IAnimatable），
+    // 编译期需要它来解析控制器类层次。
+    deobfCompile name: 'geckolib-forge-1.12.2-3.0.30'
 
     // Mixin 编译期依赖（运行时由 MixinBooter 提供）。
     // compileOnly 表示编译时需要，但不会打包进最终产物。

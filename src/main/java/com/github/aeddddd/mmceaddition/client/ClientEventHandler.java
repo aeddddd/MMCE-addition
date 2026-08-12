@@ -42,6 +42,7 @@ public class ClientEventHandler {
     public static void onModelRegister(ModelRegistryEvent event) {
         registerItemModel(Item.getItemFromBlock(RegistryHandler.ME_ASYNC_ITEM_OUTPUT_BUS));
         registerItemModel(Item.getItemFromBlock(RegistryHandler.ME_ASYNC_FLUID_OUTPUT_HATCH));
+        registerItemModel(Item.getItemFromBlock(RegistryHandler.ME_PATTERN_ASSEMBLY));
     }
 
     /**
@@ -70,6 +71,8 @@ public class ClientEventHandler {
             addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_async_item_output_bus");
         } else if (item == Item.getItemFromBlock(RegistryHandler.ME_ASYNC_FLUID_OUTPUT_HATCH)) {
             addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_async_fluid_output_hatch");
+        } else if (item == Item.getItemFromBlock(RegistryHandler.ME_PATTERN_ASSEMBLY)) {
+            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_pattern_assembly");
         }
     }
 

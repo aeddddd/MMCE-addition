@@ -51,3 +51,12 @@ cfr-*.jar
 run/
 libs/
 *.xml
+.idea/
+.tmp*/
+*.zip
+tmp*/
+*_ref/
+docs/
+*.json
+*.md
+!README.md

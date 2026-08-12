@@ -15,9 +15,12 @@ import appeng.fluids.util.AEFluidStack;
 import appeng.me.GridAccessException;
 import appeng.util.Platform;
 import appeng.util.item.AEItemStack;
+import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncFluidOutputHatch;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
+import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
+import com.github.aeddddd.mmceaddition.tile.slot.PatternAssemblySlot;
 import com.github.aeddddd.mmceaddition.util.ItemVariant;
 import com.github.aeddddd.mmceaddition.util.LongFluidBuffer;
 import com.github.aeddddd.mmceaddition.util.LongItemBuffer;
@@ -47,11 +50,12 @@ public enum MEAsyncOutputManager {
     INSTANCE;
 
     /**
-     * 每 tick 最多处理的方块数上限。
+     * 默认的每 tick 最多处理方块数上限。
      * <p>
-     * 即使有大量脏方块，也分批处理，避免单次 tick 耗时过长。
+     * 实际值由配置 {@link MMCEAdditionConfig#maxTilesPerTick} 决定；
+     * 配置为 0 时表示不限制。
      */
-    private static final int MAX_TILES_PER_TICK = 500;
+    private static final int DEFAULT_MAX_TILES_PER_TICK = 2000;
 
     /**
      * 所有已注册的异步物品总线。
@@ -64,6 +68,11 @@ public enum MEAsyncOutputManager {
     private final Set<TileMEAsyncFluidOutputHatch> fluidHatches = ConcurrentHashMap.newKeySet();
 
     /**
+     * 所有已注册的 ME 样板总成。
+     */
+    private final Set<TileMEPatternAssembly> patternAssemblies = ConcurrentHashMap.newKeySet();
+
+    /**
      * 待处理的物品总线：只有缓冲区非空的 tile 才会在这里。
      */
     private final Set<TileMEAsyncItemOutputBus> dirtyItemBuses = ConcurrentHashMap.newKeySet();
@@ -72,6 +81,11 @@ public enum MEAsyncOutputManager {
      * 待处理的流体仓。
      */
     private final Set<TileMEAsyncFluidOutputHatch> dirtyFluidHatches = ConcurrentHashMap.newKeySet();
+
+    /**
+     * 待处理的 ME 样板总成。
+     */
+    private final Set<TileMEPatternAssembly> dirtyPatternAssemblies = ConcurrentHashMap.newKeySet();
 
     /**
      * AE2 物品存储通道，用于创建 IAEItemStack 和获取 IMEMonitor。
@@ -123,6 +137,21 @@ public enum MEAsyncOutputManager {
         }
     }
 
+    public void register(TileMEPatternAssembly assembly) {
+        patternAssemblies.add(assembly);
+    }
+
+    public void unregister(TileMEPatternAssembly assembly) {
+        patternAssemblies.remove(assembly);
+        dirtyPatternAssemblies.remove(assembly);
+    }
+
+    public void markDirty(TileMEPatternAssembly assembly) {
+        if (patternAssemblies.contains(assembly)) {
+            dirtyPatternAssemblies.add(assembly);
+        }
+    }
+
     /**
      * 服务端 tick 事件处理器。
      * <p>
@@ -140,6 +169,7 @@ public enum MEAsyncOutputManager {
         }
         processItemOutputs();
         processFluidOutputs();
+        processPatternAssemblyOutputs();
     }
 
     /**
@@ -153,9 +183,10 @@ public enum MEAsyncOutputManager {
         // 按 AE 网格分组，同一网格的多个总线共享一次 storage/energy 查询。
         Map<IGrid, List<TileMEAsyncItemOutputBus>> gridMap = new HashMap<>();
         int collected = 0;
+        int maxTiles = getMaxTilesPerTick();
 
         Iterator<TileMEAsyncItemOutputBus> it = dirtyItemBuses.iterator();
-        while (it.hasNext() && collected < MAX_TILES_PER_TICK) {
+        while (it.hasNext() && (maxTiles <= 0 || collected < maxTiles)) {
             TileMEAsyncItemOutputBus bus = it.next();
             if (!isValid(bus)) {
                 it.remove();
@@ -191,6 +222,8 @@ public enum MEAsyncOutputManager {
 
     /**
      * 处理同一网格内的所有物品总线。
+     * <p>
+     * 对每个总线单独捕获异常，避免某个总线出错导致同网格的其他总线被跳过。
      */
     private void processItemGrid(IGrid grid, List<TileMEAsyncItemOutputBus> buses) {
         IStorageGrid storage = grid.getCache(IStorageGrid.class);
@@ -201,7 +234,14 @@ public enum MEAsyncOutputManager {
         IMEMonitor<IAEItemStack> monitor = storage.getInventory(itemChannel);
 
         for (TileMEAsyncItemOutputBus bus : buses) {
-            processItemBus(bus, monitor, energy);
+            try {
+                processItemBus(bus, monitor, energy);
+            } catch (Exception e) {
+                // 记录异常但继续处理同网格的其他总线；出错总线保留在 dirty 集合中稍后重试。
+                MMCEAddition.LOGGER.error(
+                        "Failed to process item output bus at {} (grid {}). Will retry next cycle.",
+                        bus.getPos(), grid, e);
+            }
         }
     }
 
@@ -210,8 +250,10 @@ public enum MEAsyncOutputManager {
      */
     private void processItemBus(TileMEAsyncItemOutputBus bus, IMEMonitor<IAEItemStack> monitor, IEnergySource energy) {
         LongItemBuffer buffer = bus.getItemBuffer();
-        IActionSource source = bus.getSource();
+        processItemBusItem(buffer, monitor, energy, bus.getSource());
+    }
 
+    private void processItemBusItem(LongItemBuffer buffer, IMEMonitor<IAEItemStack> monitor, IEnergySource energy, IActionSource source) {
         // 先取快照，避免在遍历过程中缓冲区被并发修改。
         Map<ItemVariant, Long> snapshot = buffer.snapshot();
         for (Map.Entry<ItemVariant, Long> entry : snapshot.entrySet()) {
@@ -239,6 +281,71 @@ public enum MEAsyncOutputManager {
         }
     }
 
+    private void processPatternAssemblyOutputs() {
+        if (dirtyPatternAssemblies.isEmpty()) {
+            return;
+        }
+
+        Map<IGrid, List<TileMEPatternAssembly>> gridMap = new HashMap<>();
+        int collected = 0;
+        int maxTiles = getMaxTilesPerTick();
+
+        Iterator<TileMEPatternAssembly> it = dirtyPatternAssemblies.iterator();
+        while (it.hasNext() && (maxTiles <= 0 || collected < maxTiles)) {
+            TileMEPatternAssembly assembly = it.next();
+            if (!isValid(assembly)) {
+                it.remove();
+                patternAssemblies.remove(assembly);
+                continue;
+            }
+            if (!assembly.hasAnyOutput()) {
+                it.remove();
+                continue;
+            }
+            try {
+                IGrid grid = assembly.getProxy().getGrid();
+                gridMap.computeIfAbsent(grid, k -> new ArrayList<>()).add(assembly);
+                collected++;
+            } catch (GridAccessException ignored) {
+            }
+        }
+
+        for (Map.Entry<IGrid, List<TileMEPatternAssembly>> entry : gridMap.entrySet()) {
+            processPatternAssemblyGrid(entry.getKey(), entry.getValue());
+        }
+
+        for (List<TileMEPatternAssembly> assemblies : gridMap.values()) {
+            for (TileMEPatternAssembly assembly : assemblies) {
+                if (!assembly.hasAnyOutput()) {
+                    dirtyPatternAssemblies.remove(assembly);
+                }
+            }
+        }
+    }
+
+    private void processPatternAssemblyGrid(IGrid grid, List<TileMEPatternAssembly> assemblies) {
+        IStorageGrid storage = grid.getCache(IStorageGrid.class);
+        IEnergySource energy = grid.getCache(IEnergyGrid.class);
+        if (storage == null || energy == null) {
+            return;
+        }
+        IMEMonitor<IAEItemStack> itemMonitor = storage.getInventory(itemChannel);
+        IMEMonitor<IAEFluidStack> fluidMonitor = storage.getInventory(fluidChannel);
+
+        for (TileMEPatternAssembly assembly : assemblies) {
+            try {
+                for (PatternAssemblySlot slot : assembly.getSlots()) {
+                    processItemBusItem(slot.getOutputItemBuffer(), itemMonitor, energy, assembly.getSource());
+                    processFluidHatchFluid(slot.getOutputFluidBuffer(), fluidMonitor, energy, assembly.getSource());
+                }
+            } catch (Exception e) {
+                MMCEAddition.LOGGER.error(
+                        "Failed to process pattern assembly output at {} (grid {}). Will retry next cycle.",
+                        assembly.getPos(), grid, e);
+            }
+        }
+    }
+
     /**
      * 处理所有待处理的流体仓。
      * <p>
@@ -251,9 +358,10 @@ public enum MEAsyncOutputManager {
 
         Map<IGrid, List<TileMEAsyncFluidOutputHatch>> gridMap = new HashMap<>();
         int collected = 0;
+        int maxTiles = getMaxTilesPerTick();
 
         Iterator<TileMEAsyncFluidOutputHatch> it = dirtyFluidHatches.iterator();
-        while (it.hasNext() && collected < MAX_TILES_PER_TICK) {
+        while (it.hasNext() && (maxTiles <= 0 || collected < maxTiles)) {
             TileMEAsyncFluidOutputHatch hatch = it.next();
             if (!isValid(hatch)) {
                 it.remove();
@@ -294,14 +402,22 @@ public enum MEAsyncOutputManager {
         IMEMonitor<IAEFluidStack> monitor = storage.getInventory(fluidChannel);
 
         for (TileMEAsyncFluidOutputHatch hatch : hatches) {
-            processFluidHatch(hatch, monitor, energy);
+            try {
+                processFluidHatch(hatch, monitor, energy);
+            } catch (Exception e) {
+                MMCEAddition.LOGGER.error(
+                        "Failed to process fluid output hatch at {} (grid {}). Will retry next cycle.",
+                        hatch.getPos(), grid, e);
+            }
         }
     }
 
     private void processFluidHatch(TileMEAsyncFluidOutputHatch hatch, IMEMonitor<IAEFluidStack> monitor, IEnergySource energy) {
         LongFluidBuffer buffer = hatch.getFluidBuffer();
-        IActionSource source = hatch.getSource();
+        processFluidHatchFluid(buffer, monitor, energy, hatch.getSource());
+    }
 
+    private void processFluidHatchFluid(LongFluidBuffer buffer, IMEMonitor<IAEFluidStack> monitor, IEnergySource energy, IActionSource source) {
         Map<Fluid, Long> snapshot = buffer.snapshot();
         for (Map.Entry<Fluid, Long> entry : snapshot.entrySet()) {
             Fluid fluid = entry.getKey();
@@ -333,5 +449,20 @@ public enum MEAsyncOutputManager {
      */
     private boolean isValid(TileEntity tile) {
         return tile != null && !tile.isInvalid();
+    }
+
+    /**
+     * 获取当前配置允许的单批最大处理数量。
+     * <p>
+     * 配置为 0 时表示不限制；小于 0 时按默认值处理。
+     *
+     * @return 单批最大 tile 数，0 表示无限制
+     */
+    private int getMaxTilesPerTick() {
+        int configured = MMCEAdditionConfig.maxTilesPerTick;
+        if (configured < 0) {
+            return DEFAULT_MAX_TILES_PER_TICK;
+        }
+        return configured;
     }
 }

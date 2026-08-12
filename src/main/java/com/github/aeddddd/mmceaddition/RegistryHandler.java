@@ -2,8 +2,10 @@ package com.github.aeddddd.mmceaddition;
 
 import com.github.aeddddd.mmceaddition.block.BlockMEAsyncFluidOutputHatch;
 import com.github.aeddddd.mmceaddition.block.BlockMEAsyncItemOutputBus;
+import com.github.aeddddd.mmceaddition.block.BlockMEPatternAssembly;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncFluidOutputHatch;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
+import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
@@ -38,6 +40,11 @@ public class RegistryHandler {
     public static final BlockMEAsyncFluidOutputHatch ME_ASYNC_FLUID_OUTPUT_HATCH = new BlockMEAsyncFluidOutputHatch();
 
     /**
+     * ME 样板总成方块实例。
+     */
+    public static final BlockMEPatternAssembly ME_PATTERN_ASSEMBLY = new BlockMEPatternAssembly();
+
+    /**
      * 方块注册事件处理器。
      * <p>
      * Forge 在加载阶段会触发 {@link RegistryEvent.Register<Block>}，所有方块必须在这个事件里注册。
@@ -49,7 +56,8 @@ public class RegistryHandler {
     public void onBlockRegister(RegistryEvent.Register<Block> event) {
         event.getRegistry().registerAll(
                 ME_ASYNC_ITEM_OUTPUT_BUS,
-                ME_ASYNC_FLUID_OUTPUT_HATCH
+                ME_ASYNC_FLUID_OUTPUT_HATCH,
+                ME_PATTERN_ASSEMBLY
         );
 
         // 注册 TileEntity。
@@ -59,6 +67,8 @@ public class RegistryHandler {
                 new ResourceLocation(MMCEAddition.MODID, "me_async_item_output_bus"));
         GameRegistry.registerTileEntity(TileMEAsyncFluidOutputHatch.class,
                 new ResourceLocation(MMCEAddition.MODID, "me_async_fluid_output_hatch"));
+        GameRegistry.registerTileEntity(TileMEPatternAssembly.class,
+                new ResourceLocation(MMCEAddition.MODID, "me_pattern_assembly"));
     }
 
     /**
@@ -77,7 +87,9 @@ public class RegistryHandler {
                         // 物品注册名必须与方块注册名一致，这样游戏才能把物品和方块关联起来。
                         .setRegistryName(ME_ASYNC_ITEM_OUTPUT_BUS.getRegistryName()),
                 new ItemBlock(ME_ASYNC_FLUID_OUTPUT_HATCH)
-                        .setRegistryName(ME_ASYNC_FLUID_OUTPUT_HATCH.getRegistryName())
+                        .setRegistryName(ME_ASYNC_FLUID_OUTPUT_HATCH.getRegistryName()),
+                new ItemBlock(ME_PATTERN_ASSEMBLY)
+                        .setRegistryName(ME_PATTERN_ASSEMBLY.getRegistryName())
         );
     }
 }

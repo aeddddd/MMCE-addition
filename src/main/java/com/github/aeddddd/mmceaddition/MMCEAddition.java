@@ -6,7 +6,12 @@ import net.minecraftforge.fml.common.SidedProxy;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import com.github.aeddddd.mmceaddition.gui.GuiHandler;
+import com.github.aeddddd.mmceaddition.network.PacketHandler;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
+import net.minecraftforge.fml.common.network.NetworkRegistry;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import zone.rong.mixinbooter.ILateMixinLoader;
 
 import java.util.Collections;
@@ -49,7 +54,14 @@ public class MMCEAddition implements ILateMixinLoader {
     /**
      * 模组版本号。构建时 processResources 任务会把这里和 mcmod.info 里的占位符替换掉。
      */
-    public static final String VERSION = "1.0-SNAPSHOT";
+    public static final String VERSION = "1.1beta";
+
+    /**
+     * 模组日志记录器。
+     * <p>
+     * 用于输出诊断信息、警告和错误，便于排查运行期问题。
+     */
+    public static final Logger LOGGER = LogManager.getLogger(MODID);
 
     /**
      * 客户端代理类的完整限定名。
@@ -112,6 +124,8 @@ public class MMCEAddition implements ILateMixinLoader {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         proxy.init(event);
+        NetworkRegistry.INSTANCE.registerGuiHandler(this, new GuiHandler());
+        PacketHandler.register();
     }
 
     /**

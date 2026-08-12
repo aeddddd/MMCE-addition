@@ -16,14 +16,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.List;
 
 /**
- * Mixin：让异步 ME 输出总成可以替换原 MMCE 的各类输出仓/总线结构位置。
+ * Mixin：让本模组的方块可以替换原 MMCE 的各类输入/输出仓/总线结构位置。
  * <p>
  * 背景：MMCE 的机器结构匹配逻辑在 {@link BlockArray.BlockInformation#matchesState} 中。
  * 它会检查某个位置的实际方块是否在该位置允许的方块状态列表（matchingStates）中。
  * <p>
  * 这个 Mixin 在 matchesState 方法开头注入：
- * 如果该位置原本期望的是 MMCE 原版的物品/流体输出仓，
- * 而实际放置的是本模组的异步版本，并且配置中开启了兼容，
+ * 如果该位置原本期望的是 MMCE 原版的物品/流体输入输出仓室，
+ * 而实际放置的是本模组的异步版本或 ME 样板总成，并且配置中开启了兼容，
  * 则直接返回匹配成功，无需修改现有机器 JSON。
  */
 @Mixin(value = BlockArray.BlockInformation.class, remap = false)
@@ -31,6 +31,7 @@ public class BlockInformationMixin {
 
     private static final String ASYNC_ITEM_OUTPUT_BUS = "mmceaddition:me_async_item_output_bus";
     private static final String ASYNC_FLUID_OUTPUT_BUS = "mmceaddition:me_async_fluid_output_hatch";
+    private static final String ME_PATTERN_ASSEMBLY = "mmceaddition:me_pattern_assembly";
 
     /**
      * BlockInformation 中该位置允许的所有方块状态描述符。
@@ -48,10 +49,10 @@ public class BlockInformationMixin {
      * - cancellable = true：可以调用 cir.setReturnValue(...) 提前返回，不再执行原方法
      * - remap = false：目标类没有被 obfuscation 重命名，不需要重映射
      *
-     * @param world  世界实例
-     * @param pos    检查位置
-     * @param state  实际方块状态
-     * @param cir    回调对象，用于取消并设置返回值
+     * @param world 世界实例
+     * @param pos   检查位置
+     * @param state 实际方块状态
+     * @param cir   回调对象，用于取消并设置返回值
      */
     @Inject(method = "matchesState", at = @At("HEAD"), cancellable = true, remap = false)
     private void onMatchesState(World world, BlockPos pos, IBlockState state, CallbackInfoReturnable<Boolean> cir) {
@@ -62,9 +63,11 @@ public class BlockInformationMixin {
         Block actualBlock = state.getBlock();
         String actualRegName = actualBlock.getRegistryName() != null ? actualBlock.getRegistryName().toString() : null;
 
-        // 遍历期望的方块状态，判断该位置是否期望原版物品输出总线或流体输出仓。
-        boolean expectItemOutput = false;
-        boolean expectFluidOutput = false;
+        // 遍历期望的方块状态，判断该位置是否期望原版物品/流体输入输出仓室或 ME 样板供应器。
+        boolean expectItemBus = false;
+        boolean expectFluidHatch = false;
+        boolean expectPatternProvider = false;
+        boolean expectEnergyInputHatch = false;
 
         for (IBlockStateDescriptor descriptor : matchingStates) {
             if (descriptor == null || descriptor.getApplicable() == null) {
@@ -76,24 +79,53 @@ public class BlockInformationMixin {
                 }
                 Block block = applicable.getBlock();
                 String regName = block.getRegistryName() != null ? block.getRegistryName().toString() : null;
-                if (isItemOutputBus(regName)) {
-                    expectItemOutput = true;
-                } else if (isFluidOutputHatch(regName)) {
-                    expectFluidOutput = true;
+                if (isItemBus(regName)) {
+                    expectItemBus = true;
+                } else if (isFluidHatch(regName)) {
+                    expectFluidHatch = true;
+                } else if (isPatternProvider(regName)) {
+                    expectPatternProvider = true;
+                } else if (isEnergyInputHatch(regName)) {
+                    expectEnergyInputHatch = true;
                 }
             }
         }
 
-        // 如果期望物品输出总线，且配置开启兼容，且实际方块是本模组的异步物品总线，则视为匹配。
-        if (expectItemOutput && MMCEAdditionConfig.enableMEItemBusCompat
+        // 异步物品输出总线：可替换任何物品总线位置。
+        if (expectItemBus && MMCEAdditionConfig.enableMEItemBusCompat
                 && ASYNC_ITEM_OUTPUT_BUS.equals(actualRegName)) {
             cir.setReturnValue(true);
         }
-        // 流体同理。
-        else if (expectFluidOutput && MMCEAdditionConfig.enableMEFluidBusCompat
+        // 异步流体输出仓：可替换任何流体仓位置。
+        else if (expectFluidHatch && MMCEAdditionConfig.enableMEFluidBusCompat
                 && ASYNC_FLUID_OUTPUT_BUS.equals(actualRegName)) {
             cir.setReturnValue(true);
         }
+        // ME 样板总成：可替换任何物品/流体输入输出仓室、能源输入仓以及原版 ME Pattern Provider 位置。
+        else if (MMCEAdditionConfig.enableMEPatternAssemblyCompat
+                && ME_PATTERN_ASSEMBLY.equals(actualRegName)
+                && (expectItemBus || expectFluidHatch || expectPatternProvider || expectEnergyInputHatch)) {
+            cir.setReturnValue(true);
+        }
+    }
+
+    /**
+     * 判断注册名是否是 MMCE 原版的物品总线（输入或输出）。
+     */
+    private boolean isItemBus(String regName) {
+        return isItemInputBus(regName) || isItemOutputBus(regName);
+    }
+
+    /**
+     * 判断注册名是否是 MMCE 原版的物品输入总线。
+     */
+    private boolean isItemInputBus(String regName) {
+        if (regName == null) {
+            return false;
+        }
+        return regName.equals("modularmachinery:blockmeiteminputbus")
+                || regName.equals("modularmachinery:blockinputbus")
+                || regName.startsWith("modularmachinery:blockinputbus_");
     }
 
     /**
@@ -109,6 +141,25 @@ public class BlockInformationMixin {
     }
 
     /**
+     * 判断注册名是否是 MMCE 原版的流体仓（输入或输出）。
+     */
+    private boolean isFluidHatch(String regName) {
+        return isFluidInputHatch(regName) || isFluidOutputHatch(regName);
+    }
+
+    /**
+     * 判断注册名是否是 MMCE 原版的流体输入仓。
+     */
+    private boolean isFluidInputHatch(String regName) {
+        if (regName == null) {
+            return false;
+        }
+        return regName.equals("modularmachinery:blockmefluidinputbus")
+                || regName.equals("modularmachinery:blockfluidinputhatch")
+                || regName.startsWith("modularmachinery:blockfluidinputhatch_");
+    }
+
+    /**
      * 判断注册名是否是 MMCE 原版的流体输出仓。
      */
     private boolean isFluidOutputHatch(String regName) {
@@ -118,5 +169,29 @@ public class BlockInformationMixin {
         return regName.equals("modularmachinery:blockmefluidoutputbus")
                 || regName.equals("modularmachinery:blockfluidoutputhatch")
                 || regName.startsWith("modularmachinery:blockfluidoutputhatch_");
+    }
+
+    /**
+     * 判断注册名是否是 MMCE 原版的 ME 样板供应器。
+     */
+    private boolean isPatternProvider(String regName) {
+        if (regName == null) {
+            return false;
+        }
+        return regName.equals("modularmachinery:blockmepatternprovider");
+    }
+
+    /**
+     * 判断注册名是否是 MMCE 原版的能源输入仓。
+     * <p>
+     * MMCE-CE 的能源输入仓为单方块多 meta（tiny ~ ultimate），注册名为
+     * {@code modularmachinery:blockenergyinputhatch}；startsWith 兜底可能的扩展命名。
+     */
+    private boolean isEnergyInputHatch(String regName) {
+        if (regName == null) {
+            return false;
+        }
+        return regName.equals("modularmachinery:blockenergyinputhatch")
+                || regName.startsWith("modularmachinery:blockenergyinputhatch_");
     }
 }

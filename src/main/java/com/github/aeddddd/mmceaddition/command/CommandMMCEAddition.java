@@ -2,15 +2,27 @@ package com.github.aeddddd.mmceaddition.command;
 
 import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
+import com.github.aeddddd.mmceaddition.compat.NetworkEnergyCompat;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
+import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
 import github.kasuminova.mmce.common.tile.MEItemOutputBus;
+import hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent;
+import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
+import hellfirepvp.modularmachinery.common.machine.IOType;
+import hellfirepvp.modularmachinery.common.machine.MachineComponent;
+import hellfirepvp.modularmachinery.common.tiles.base.TileMultiblockMachineController;
+import hellfirepvp.modularmachinery.common.util.IEnergyHandler;
+import hellfirepvp.modularmachinery.common.util.IEnergyHandlerAsync;
 import hellfirepvp.modularmachinery.common.util.IOInventory;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.TextComponentTranslation;
 import net.minecraft.world.World;
@@ -21,6 +33,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 调试/管理命令。
@@ -39,7 +52,7 @@ public class CommandMMCEAddition extends CommandBase {
     @Override
     @Nonnull
     public String getUsage(@Nonnull ICommandSender sender) {
-        return "/mmceaddition replaceMeItemBus";
+        return "/mmceaddition replaceMeItemBus|inspect";
     }
 
     @Override
@@ -56,7 +69,15 @@ public class CommandMMCEAddition extends CommandBase {
 
     @Override
     public void execute(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender, @Nonnull String[] args) {
-        if (args.length == 0 || !"replaceMeItemBus".equalsIgnoreCase(args[0])) {
+        if (args.length == 0) {
+            sender.sendMessage(new TextComponentString(getUsage(sender)));
+            return;
+        }
+        if ("inspect".equalsIgnoreCase(args[0])) {
+            executeInspect(sender);
+            return;
+        }
+        if (!"replaceMeItemBus".equalsIgnoreCase(args[0])) {
             sender.sendMessage(new TextComponentString(getUsage(sender)));
             return;
         }
@@ -110,12 +131,94 @@ public class CommandMMCEAddition extends CommandBase {
                 "commands.mmceaddition.replaceMeItemBus.success", replaced, transferred));
     }
 
+    /**
+     * 诊断子命令：看向 MMCE 控制器时 dump 其 foundComponents，
+     * 用于排查“没有找到能量输入口”这类组件识别问题；
+     * 看向 ME 样板总成时显示其网络能源状态。
+     */
+    private void executeInspect(ICommandSender sender) {
+        Entity entity = sender.getCommandSenderEntity();
+        if (!(entity instanceof EntityPlayer)) {
+            sender.sendMessage(new TextComponentString("§c只有玩家可以使用该命令（需要看向目标方块）。"));
+            return;
+        }
+        EntityPlayer player = (EntityPlayer) entity;
+        RayTraceResult ray = player.rayTrace(8.0D, 1.0F);
+        if (ray == null || ray.typeOfHit != RayTraceResult.Type.BLOCK) {
+            sender.sendMessage(new TextComponentString("§c请看向 MMCE 控制器或 ME 样板总成。"));
+            return;
+        }
+        World world = sender.getEntityWorld();
+        TileEntity te = world.getTileEntity(ray.getBlockPos());
+        if (te instanceof TileMultiblockMachineController) {
+            inspectController(sender, (TileMultiblockMachineController) te);
+        } else if (te instanceof TileMEPatternAssembly) {
+            inspectPatternAssembly(sender, (TileMEPatternAssembly) te);
+        } else {
+            sender.sendMessage(new TextComponentString("§c目标不是 MMCE 控制器或 ME 样板总成："
+                    + (te == null ? "无 TileEntity" : te.getClass().getName())));
+        }
+    }
+
+    private void inspectController(ICommandSender sender, TileMultiblockMachineController ctrl) {
+        sender.sendMessage(new TextComponentString("§e--- 控制器诊断 ---"));
+        sender.sendMessage(new TextComponentString("结构成形: " + ctrl.isStructureFormed()));
+        DynamicMachine machine = ctrl.getFoundMachine();
+        sender.sendMessage(new TextComponentString("匹配机器: "
+                + (machine == null ? "§c无" : String.valueOf(machine.getRegistryName()))));
+
+        Map<TileEntity, ProcessingComponent<?>> components = ctrl.getFoundComponents();
+        sender.sendMessage(new TextComponentString("foundComponents 数量: " + components.size()));
+        int validEnergyInput = 0;
+        for (Map.Entry<TileEntity, ProcessingComponent<?>> entry : components.entrySet()) {
+            TileEntity componentTe = entry.getKey();
+            ProcessingComponent<?> pc = entry.getValue();
+            MachineComponent<?> component = pc.component();
+            Object provider = pc.getProvidedComponent();
+
+            boolean isEnergyInput = component instanceof MachineComponent.EnergyHatch
+                    && component.ioType == IOType.INPUT
+                    && provider instanceof IEnergyHandler;
+            if (isEnergyInput) {
+                validEnergyInput++;
+            }
+            Object typeName = component.getComponentType() == null
+                    ? "null" : component.getComponentType().getRegistryName();
+            sender.sendMessage(new TextComponentString(String.format(
+                    "%s- %s @ %s | 组件=%s | 类型=%s | IO=%s | 提供者=%s",
+                    isEnergyInput ? "§a" : "§7",
+                    componentTe.getClass().getSimpleName(),
+                    componentTe.getPos().toString().replace("BlockPos", ""),
+                    component.getClass().getSimpleName().isEmpty()
+                            ? component.getClass().getName() : component.getClass().getSimpleName(),
+                    typeName,
+                    component.ioType,
+                    provider == null ? "null" : provider.getClass().getSimpleName())));
+        }
+        sender.sendMessage(new TextComponentString(validEnergyInput > 0
+                ? "§a有效能源输入组件: " + validEnergyInput
+                : "§c未找到有效能源输入组件（RequirementEnergy.isValidComponent 全部不通过）"));
+    }
+
+    private void inspectPatternAssembly(ICommandSender sender, TileMEPatternAssembly assembly) {
+        sender.sendMessage(new TextComponentString("§e--- ME 样板总成诊断 ---"));
+        ProcessingComponent<IEnergyHandlerAsync> component = assembly.createEnergyInputProcessingComponent();
+        MachineComponent<?> machineComponent = component.component();
+        sender.sendMessage(new TextComponentString("能源组件: §a"
+                + machineComponent.getClass().getSimpleName()
+                + " | 类型=" + (machineComponent.getComponentType() == null
+                ? "null" : machineComponent.getComponentType().getRegistryName())
+                + " | IO=" + machineComponent.ioType));
+        sender.sendMessage(new TextComponentString("AE2Enhanced API 可用: " + NetworkEnergyCompat.isAvailable()));
+        sender.sendMessage(new TextComponentString("网络 RF 存量: " + assembly.getNetworkEnergy()));
+    }
+
     @Override
     @Nonnull
     public List<String> getTabCompletions(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender,
                                            @Nonnull String[] args, @Nullable BlockPos targetPos) {
         if (args.length == 1) {
-            return getListOfStringsMatchingLastWord(args, "replaceMeItemBus");
+            return getListOfStringsMatchingLastWord(args, "replaceMeItemBus", "inspect");
         }
         return Collections.emptyList();
     }
