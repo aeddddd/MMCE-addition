@@ -31,18 +31,23 @@ public abstract class RequirementItemMixin {
     public float chance;
 
     @Shadow
-    public IOType actionType;
-
-    @Shadow
     private int doItemIOInternal(List<ProcessingComponent<?>> components, RecipeCraftingContext context,
                                  int maxMultiplier, List<AdvancedItemModifier> itemModifiers, ResultChance chance) {
         throw new AssertionError("Shadow method");
     }
 
-    @Inject(method = "canStartCrafting", at = @At("HEAD"), cancellable = true)
+    /** actionType 声明在基类 ComponentRequirement 中，无法 @Shadow，直接转型调用。 */
+    private boolean mmceaddition$isNonConsumedInput() {
+        return ((RequirementItem) (Object) this).getActionType() == IOType.INPUT && chance <= 0;
+    }
+
+    // RequirementItem 存在三参重载 canStartCrafting(List, RecipeCraftingContext, List)，
+    // 必须用完整描述符只匹配两参的检查入口。
+    @Inject(method = "canStartCrafting(Ljava/util/List;Lhellfirepvp/modularmachinery/common/crafting/helper/RecipeCraftingContext;)Lhellfirepvp/modularmachinery/common/crafting/helper/CraftCheck;",
+            at = @At("HEAD"), cancellable = true)
     private void mmceaddition$nonConsumedCheck(List<ProcessingComponent<?>> components, RecipeCraftingContext context,
                                                CallbackInfoReturnable<CraftCheck> cir) {
-        if (actionType == IOType.INPUT && chance <= 0) {
+        if (mmceaddition$isNonConsumedInput()) {
             cir.setReturnValue(doItemIOInternal(components, context, 1, Collections.emptyList(), ResultChance.GUARANTEED) >= 1
                     ? CraftCheck.success()
                     : CraftCheck.failure("craftcheck.failure.item.input"));
@@ -52,7 +57,7 @@ public abstract class RequirementItemMixin {
     @Inject(method = "getMaxParallelism", at = @At("HEAD"), cancellable = true)
     private void mmceaddition$nonConsumedParallelism(List<ProcessingComponent<?>> components, RecipeCraftingContext context,
                                                      int maxParallelism, CallbackInfoReturnable<Integer> cir) {
-        if (actionType == IOType.INPUT && chance <= 0) {
+        if (mmceaddition$isNonConsumedInput()) {
             cir.setReturnValue(doItemIOInternal(components, context, 1, Collections.emptyList(), ResultChance.GUARANTEED) >= 1
                     ? maxParallelism : 0);
         }

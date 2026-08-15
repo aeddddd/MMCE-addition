@@ -47,20 +47,40 @@ public class LongInputItemHandler extends IItemHandlerImpl {
         this.miscSlots = new int[0];
     }
 
+    /**
+     * 仅供检查副本使用的催化剂只读视图：下标从 {@link #VISIBLE_SLOTS} 起。
+     * 让 RequirementCatalyst 在基于副本的配方检查/并行度计算中能看到催化剂存在；
+     * 真实 handler 不设置此视图，催化剂永远不会被消耗或插入。
+     */
+    private ItemStack[] catalystView = null;
+
     private LongInputItemHandler(LongItemBuffer buffer, ItemVariant[] slotVariants) {
         this(buffer);
         System.arraycopy(slotVariants, 0, this.slotVariants, 0, Math.min(slotVariants.length, VISIBLE_SLOTS));
     }
 
+    /** 为检查副本追加只读的催化剂展示槽（每个元素已是对外的拷贝）。 */
+    public void setCatalystView(ItemStack[] catalysts) {
+        this.catalystView = catalysts;
+    }
+
+    private int catalystSlots() {
+        return catalystView == null ? 0 : catalystView.length;
+    }
+
     @Override
     public int getSlots() {
-        return VISIBLE_SLOTS;
+        return VISIBLE_SLOTS + catalystSlots();
     }
 
     @Nonnull
     @Override
     public ItemStack getStackInSlot(int slot) {
-        if (slot < 0 || slot >= VISIBLE_SLOTS) {
+        if (slot >= VISIBLE_SLOTS) {
+            int idx = slot - VISIBLE_SLOTS;
+            return idx >= 0 && idx < catalystSlots() ? catalystView[idx].copy() : ItemStack.EMPTY;
+        }
+        if (slot < 0) {
             return ItemStack.EMPTY;
         }
         ItemVariant variant = slotVariants[slot];
@@ -80,8 +100,12 @@ public class LongInputItemHandler extends IItemHandlerImpl {
     @Nonnull
     @Override
     public ItemStack insertItem(int slot, @Nonnull ItemStack stack, boolean simulate) {
-        if (stack.isEmpty() || slot < 0 || slot >= VISIBLE_SLOTS) {
+        if (stack.isEmpty() || slot < 0 || slot >= VISIBLE_SLOTS + catalystSlots()) {
             return stack.isEmpty() ? ItemStack.EMPTY : stack;
+        }
+        // 催化剂展示槽拒绝一切插入
+        if (slot >= VISIBLE_SLOTS) {
+            return stack.copy();
         }
 
         ItemVariant variant = new ItemVariant(stack);
@@ -128,7 +152,11 @@ public class LongInputItemHandler extends IItemHandlerImpl {
     @Nonnull
     @Override
     public ItemStack extractItem(int slot, int amount, boolean simulate) {
-        if (amount <= 0 || slot < 0 || slot >= VISIBLE_SLOTS) {
+        if (amount <= 0 || slot < 0 || slot >= VISIBLE_SLOTS + catalystSlots()) {
+            return ItemStack.EMPTY;
+        }
+        // 催化剂展示槽不可取出
+        if (slot >= VISIBLE_SLOTS) {
             return ItemStack.EMPTY;
         }
         ItemVariant variant = slotVariants[slot];
@@ -154,7 +182,11 @@ public class LongInputItemHandler extends IItemHandlerImpl {
 
     @Override
     public void setStackInSlot(int slot, @Nonnull ItemStack stack) {
-        if (slot < 0 || slot >= VISIBLE_SLOTS) {
+        if (slot < 0 || slot >= VISIBLE_SLOTS + catalystSlots()) {
+            return;
+        }
+        // 催化剂展示槽只读：MMCE 检查期对副本的 setStackInSlot 落点不影响催化剂
+        if (slot >= VISIBLE_SLOTS) {
             return;
         }
         // setStackInSlot 是"替换该槽内容"语义，MMCE 的 ItemUtils.consumeAll/insertAll
@@ -231,7 +263,12 @@ public class LongInputItemHandler extends IItemHandlerImpl {
         LongItemBuffer copiedBuffer = new LongItemBuffer();
         copiedBuffer.readFromNBT(bufferToNbt());
         ItemVariant[] copiedVariants = rebuildSlotVariants(copiedBuffer);
-        return new LongInputItemHandler(copiedBuffer, copiedVariants);
+        LongInputItemHandler copied = new LongInputItemHandler(copiedBuffer, copiedVariants);
+        // 副本的副本保留催化剂视图（数组内 ItemStack 不会被修改，浅拷贝即可）
+        if (catalystView != null) {
+            copied.setCatalystView(catalystView.clone());
+        }
+        return copied;
     }
 
     @Override

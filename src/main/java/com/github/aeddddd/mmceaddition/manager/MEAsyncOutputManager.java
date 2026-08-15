@@ -102,6 +102,19 @@ public enum MEAsyncOutputManager {
      */
     private int tickCounter = 0;
 
+    /**
+     * 全量兜底扫描间隔（tick）。
+     * <p>
+     * 脏标记链路的任何遗漏（极端时序、跨线程写入、异常中断等）都会导致缓冲内容
+     * 永远不被处理；每隔一段时间全量扫描一次所有已注册方块，保证自愈。
+     */
+    private static final int RESCAN_INTERVAL = 100;
+
+    /**
+     * 兜底扫描计数器。
+     */
+    private int rescanCounter = 0;
+
     public void register(TileMEAsyncItemOutputBus bus) {
         itemBuses.add(bus);
     }
@@ -163,6 +176,10 @@ public enum MEAsyncOutputManager {
             return;
         }
         tickCounter++;
+        if (++rescanCounter >= RESCAN_INTERVAL) {
+            rescanCounter = 0;
+            rescanAll();
+        }
         int interval = Math.max(1, MMCEAdditionConfig.injectionInterval);
         if (tickCounter % interval != 0) {
             return;
@@ -170,6 +187,29 @@ public enum MEAsyncOutputManager {
         processItemOutputs();
         processFluidOutputs();
         processPatternAssemblyOutputs();
+    }
+
+    /**
+     * 全量兜底扫描：把所有缓冲非空的已注册方块重新加入待处理集合。
+     * <p>
+     * 正常情况下脏标记链路已经覆盖所有写入，本方法只是廉价保险。
+     */
+    private void rescanAll() {
+        for (TileMEAsyncItemOutputBus bus : itemBuses) {
+            if (!bus.isInvalid() && !bus.getItemBuffer().isEmpty()) {
+                dirtyItemBuses.add(bus);
+            }
+        }
+        for (TileMEAsyncFluidOutputHatch hatch : fluidHatches) {
+            if (!hatch.isInvalid() && !hatch.getFluidBuffer().isEmpty()) {
+                dirtyFluidHatches.add(hatch);
+            }
+        }
+        for (TileMEPatternAssembly assembly : patternAssemblies) {
+            if (!assembly.isInvalid() && assembly.hasAnyOutput()) {
+                dirtyPatternAssemblies.add(assembly);
+            }
+        }
     }
 
     /**
@@ -277,6 +317,10 @@ public enum MEAsyncOutputManager {
             long inserted = amount - (leftover == null ? 0 : leftover.getStackSize());
             if (inserted > 0) {
                 buffer.extract(variant, inserted);
+            } else if (MMCEAdditionConfig.debugPatternAssembly) {
+                // 注入完全失败：网络没有对应存储空间、能量不足或安全权限拦截
+                MMCEAddition.LOGGER.debug("ME output injection rejected: {} x{} (network full / no energy / security?)",
+                        variant.toSingleStack().getDisplayName(), amount);
             }
         }
     }
@@ -437,6 +481,10 @@ public enum MEAsyncOutputManager {
             long inserted = amount - (leftover == null ? 0 : leftover.getStackSize());
             if (inserted > 0) {
                 buffer.extract(fluid, inserted);
+            } else if (MMCEAdditionConfig.debugPatternAssembly) {
+                // 注入完全失败：网络没有流体存储、能量不足或安全权限拦截
+                MMCEAddition.LOGGER.debug("ME fluid output injection rejected: {} x{} mB (no fluid storage / no energy / security?)",
+                        fluid.getName(), amount);
             }
         }
     }

@@ -3,12 +3,19 @@ package com.github.aeddddd.mmceaddition;
 import com.github.aeddddd.mmceaddition.block.BlockMEAsyncFluidOutputHatch;
 import com.github.aeddddd.mmceaddition.block.BlockMEAsyncItemOutputBus;
 import com.github.aeddddd.mmceaddition.block.BlockMEPatternAssembly;
+import com.github.aeddddd.mmceaddition.block.BlockVirtualAssembler;
+import com.github.aeddddd.mmceaddition.block.BlockVirtualParallelHatch;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncFluidOutputHatch;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
 import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
+import com.github.aeddddd.mmceaddition.virtual.ItemMachineData;
+import com.github.aeddddd.mmceaddition.virtual.RecipeMachineDataMerge;
+import com.github.aeddddd.mmceaddition.virtual.TileVirtualAssembler;
+import com.github.aeddddd.mmceaddition.virtual.TileVirtualParallelHatch;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
+import net.minecraft.item.crafting.IRecipe;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.event.RegistryEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -45,6 +52,21 @@ public class RegistryHandler {
     public static final BlockMEPatternAssembly ME_PATTERN_ASSEMBLY = new BlockMEPatternAssembly();
 
     /**
+     * 虚拟装配台方块实例（单方块机器：把多方块机器装配为机器数据）。
+     */
+    public static final BlockVirtualAssembler VIRTUAL_ASSEMBLER = new BlockVirtualAssembler();
+
+    /**
+     * 虚拟并行仓方块实例（放入匹配的机器数据提供独立乘区并行度）。
+     */
+    public static final BlockVirtualParallelHatch VIRTUAL_PARALLEL_HATCH = new BlockVirtualParallelHatch();
+
+    /**
+     * 机器数据物品实例（不进创造栏，仅由虚拟装配台产出）。
+     */
+    public static final ItemMachineData MACHINE_DATA = new ItemMachineData();
+
+    /**
      * 方块注册事件处理器。
      * <p>
      * Forge 在加载阶段会触发 {@link RegistryEvent.Register<Block>}，所有方块必须在这个事件里注册。
@@ -57,7 +79,9 @@ public class RegistryHandler {
         event.getRegistry().registerAll(
                 ME_ASYNC_ITEM_OUTPUT_BUS,
                 ME_ASYNC_FLUID_OUTPUT_HATCH,
-                ME_PATTERN_ASSEMBLY
+                ME_PATTERN_ASSEMBLY,
+                VIRTUAL_ASSEMBLER,
+                VIRTUAL_PARALLEL_HATCH
         );
 
         // 注册 TileEntity。
@@ -69,6 +93,10 @@ public class RegistryHandler {
                 new ResourceLocation(MMCEAddition.MODID, "me_async_fluid_output_hatch"));
         GameRegistry.registerTileEntity(TileMEPatternAssembly.class,
                 new ResourceLocation(MMCEAddition.MODID, "me_pattern_assembly"));
+        GameRegistry.registerTileEntity(TileVirtualAssembler.class,
+                new ResourceLocation(MMCEAddition.MODID, "virtual_assembler"));
+        GameRegistry.registerTileEntity(TileVirtualParallelHatch.class,
+                new ResourceLocation(MMCEAddition.MODID, "virtual_parallel_hatch"));
     }
 
     /**
@@ -89,7 +117,27 @@ public class RegistryHandler {
                 new ItemBlock(ME_ASYNC_FLUID_OUTPUT_HATCH)
                         .setRegistryName(ME_ASYNC_FLUID_OUTPUT_HATCH.getRegistryName()),
                 new ItemBlock(ME_PATTERN_ASSEMBLY)
-                        .setRegistryName(ME_PATTERN_ASSEMBLY.getRegistryName())
+                        .setRegistryName(ME_PATTERN_ASSEMBLY.getRegistryName()),
+                new ItemBlock(VIRTUAL_ASSEMBLER)
+                        .setRegistryName(VIRTUAL_ASSEMBLER.getRegistryName()),
+                new ItemBlock(VIRTUAL_PARALLEL_HATCH)
+                        .setRegistryName(VIRTUAL_PARALLEL_HATCH.getRegistryName()),
+                // 机器数据物品（仅由虚拟装配台产出，不进创造栏）
+                MACHINE_DATA
         );
+    }
+
+    /**
+     * 配方注册事件处理器。
+     * <p>
+     * 机器数据合并配方是动态配方（输出取决于输入的机器与数量），无法用 JSON 表达，
+     * 需要注册自定义 {@link IRecipe} 实现。
+     *
+     * @param event 配方注册事件
+     */
+    @SubscribeEvent
+    public void onRecipeRegister(RegistryEvent.Register<IRecipe> event) {
+        event.getRegistry().register(new RecipeMachineDataMerge()
+                .setRegistryName(new ResourceLocation(MMCEAddition.MODID, "machine_data_merge")));
     }
 }

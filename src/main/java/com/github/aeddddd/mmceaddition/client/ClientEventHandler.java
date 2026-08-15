@@ -3,10 +3,12 @@ package com.github.aeddddd.mmceaddition.client;
 import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
+import com.github.aeddddd.mmceaddition.virtual.ItemMachineData;
 import net.minecraft.client.renderer.block.model.ModelResourceLocation;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraftforge.client.event.ColorHandlerEvent;
 import net.minecraftforge.client.event.ModelRegistryEvent;
 import net.minecraftforge.client.model.ModelLoader;
 import net.minecraftforge.event.entity.player.ItemTooltipEvent;
@@ -43,6 +45,25 @@ public class ClientEventHandler {
         registerItemModel(Item.getItemFromBlock(RegistryHandler.ME_ASYNC_ITEM_OUTPUT_BUS));
         registerItemModel(Item.getItemFromBlock(RegistryHandler.ME_ASYNC_FLUID_OUTPUT_HATCH));
         registerItemModel(Item.getItemFromBlock(RegistryHandler.ME_PATTERN_ASSEMBLY));
+        registerItemModel(Item.getItemFromBlock(RegistryHandler.VIRTUAL_ASSEMBLER));
+        registerItemModel(Item.getItemFromBlock(RegistryHandler.VIRTUAL_PARALLEL_HATCH));
+        registerItemModel(RegistryHandler.MACHINE_DATA);
+    }
+
+    /**
+     * 物品染色注册。
+     * <p>
+     * 机器数据的第二层（白色电路走线贴图）按机器注册名 hash 动态着色，
+     * 同机器同色、不同机器可区分，无需为每种机器单独绘制贴图。
+     */
+    @SubscribeEvent
+    public static void onItemColors(ColorHandlerEvent.Item event) {
+        event.getItemColors().registerItemColorHandler((stack, tintIndex) -> {
+            if (tintIndex == 1) {
+                return ItemMachineData.tintFor(ItemMachineData.getMachineName(stack));
+            }
+            return 0xFFFFFFFF;
+        }, RegistryHandler.MACHINE_DATA);
     }
 
     /**
@@ -73,6 +94,10 @@ public class ClientEventHandler {
             addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_async_fluid_output_hatch");
         } else if (item == Item.getItemFromBlock(RegistryHandler.ME_PATTERN_ASSEMBLY)) {
             addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_pattern_assembly");
+        } else if (item == Item.getItemFromBlock(RegistryHandler.VIRTUAL_ASSEMBLER)) {
+            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.virtual_assembler");
+        } else if (item == Item.getItemFromBlock(RegistryHandler.VIRTUAL_PARALLEL_HATCH)) {
+            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.virtual_parallel_hatch");
         }
     }
 

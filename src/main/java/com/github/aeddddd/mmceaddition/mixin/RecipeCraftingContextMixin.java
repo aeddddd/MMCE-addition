@@ -1,11 +1,17 @@
 package com.github.aeddddd.mmceaddition.mixin;
 
 import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
+import hellfirepvp.modularmachinery.common.crafting.helper.ComponentRequirement;
 import hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent;
 import hellfirepvp.modularmachinery.common.crafting.helper.RecipeCraftingContext;
+import hellfirepvp.modularmachinery.common.crafting.helper.RequirementComponents;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -23,6 +29,30 @@ import java.util.List;
  */
 @Mixin(value = RecipeCraftingContext.class, remap = false)
 public class RecipeCraftingContextMixin {
+
+    @Shadow
+    @Final
+    private List<RequirementComponents> requirementComponents;
+
+    /**
+     * 原生并行分支的门槛要求"全部需求都参与并行计算"，但 MMCE 默认把
+     * parallelizeUnaffected 的需求（如催化剂 RequirementCatalyst）排除在外，
+     * 导致任何带催化剂的配方永远无法进入原生并行。
+     * <p>
+     * 这类需求的 getMaxParallelism 自身会按 1 倍验证存在性（存在即返回满并行度），
+     * 且不随并行度消耗，因此把它们纳入并行计算是完整且安全的——
+     * 这也是催化剂配方（及"物品产流体/流体产物品"等混合配方）能够正确并行的前提。
+     */
+    @Inject(method = "getAllParallelizableComponents", at = @At("HEAD"), cancellable = true, remap = false)
+    private void mmceaddition$includeUnaffectedRequirements(CallbackInfoReturnable<List<RequirementComponents>> cir) {
+        List<RequirementComponents> list = new ArrayList<>(requirementComponents.size());
+        for (RequirementComponents rc : requirementComponents) {
+            if (rc.requirement() instanceof ComponentRequirement.Parallelizable) {
+                list.add(rc);
+            }
+        }
+        cir.setReturnValue(list);
+    }
 
     @ModifyVariable(
             method = "updateComponents",

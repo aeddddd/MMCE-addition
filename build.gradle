@@ -71,6 +71,8 @@ dependencies {
     // GeckoLib：MMCE-CE 的传递依赖（TileMultiblockMachineController 实现了 IAnimatable），
     // 编译期需要它来解析控制器类层次。
     deobfCompile name: 'geckolib-forge-1.12.2-3.0.30'
+    // HadEnoughItems（JEI 的 1.12.2 分支）：虚拟装配台配方列表（@JEIPlugin 仅在 HEI 存在时加载，天然软依赖）
+    deobfCompile name: 'HadEnoughItems_1.12.2-4.29.15'
 
     // Mixin 编译期依赖（运行时由 MixinBooter 提供）。
     // compileOnly 表示编译时需要，但不会打包进最终产物。

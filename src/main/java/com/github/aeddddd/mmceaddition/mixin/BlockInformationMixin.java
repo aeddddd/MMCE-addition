@@ -32,6 +32,7 @@ public class BlockInformationMixin {
     private static final String ASYNC_ITEM_OUTPUT_BUS = "mmceaddition:me_async_item_output_bus";
     private static final String ASYNC_FLUID_OUTPUT_BUS = "mmceaddition:me_async_fluid_output_hatch";
     private static final String ME_PATTERN_ASSEMBLY = "mmceaddition:me_pattern_assembly";
+    private static final String VIRTUAL_PARALLEL_HATCH = "mmceaddition:virtual_parallel_hatch";
 
     /**
      * BlockInformation 中该位置允许的所有方块状态描述符。
@@ -68,6 +69,7 @@ public class BlockInformationMixin {
         boolean expectFluidHatch = false;
         boolean expectPatternProvider = false;
         boolean expectEnergyInputHatch = false;
+        boolean expectEnergyOutputHatch = false;
 
         for (IBlockStateDescriptor descriptor : matchingStates) {
             if (descriptor == null || descriptor.getApplicable() == null) {
@@ -87,6 +89,8 @@ public class BlockInformationMixin {
                     expectPatternProvider = true;
                 } else if (isEnergyInputHatch(regName)) {
                     expectEnergyInputHatch = true;
+                } else if (isEnergyOutputHatch(regName)) {
+                    expectEnergyOutputHatch = true;
                 }
             }
         }
@@ -105,6 +109,14 @@ public class BlockInformationMixin {
         else if (MMCEAdditionConfig.enableMEPatternAssemblyCompat
                 && ME_PATTERN_ASSEMBLY.equals(actualRegName)
                 && (expectItemBus || expectFluidHatch || expectPatternProvider || expectEnergyInputHatch)) {
+            cir.setReturnValue(true);
+        }
+        // 虚拟并行仓：可替换全部仓室位置（物品/流体/能源输入输出、ME Pattern Provider）。
+        // 注意：替换机器唯一的输入仓会导致断料，属玩家自主选择（Tooltip 已警示）。
+        else if (MMCEAdditionConfig.enableVirtualHatchCompat
+                && VIRTUAL_PARALLEL_HATCH.equals(actualRegName)
+                && (expectItemBus || expectFluidHatch || expectPatternProvider
+                || expectEnergyInputHatch || expectEnergyOutputHatch)) {
             cir.setReturnValue(true);
         }
     }
@@ -193,5 +205,16 @@ public class BlockInformationMixin {
         }
         return regName.equals("modularmachinery:blockenergyinputhatch")
                 || regName.startsWith("modularmachinery:blockenergyinputhatch_");
+    }
+
+    /**
+     * 判断注册名是否是 MMCE 原版的能源输出仓。
+     */
+    private boolean isEnergyOutputHatch(String regName) {
+        if (regName == null) {
+            return false;
+        }
+        return regName.equals("modularmachinery:blockenergyoutputhatch")
+                || regName.startsWith("modularmachinery:blockenergyoutputhatch_");
     }
 }

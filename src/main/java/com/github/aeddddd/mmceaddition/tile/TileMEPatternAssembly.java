@@ -5,7 +5,9 @@ import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.crafting.ICraftingProviderHelper;
 import appeng.api.networking.events.MENetworkCraftingPatternChange;
 import appeng.api.storage.data.IAEItemStack;
+import appeng.helpers.DualityInterface;
 import appeng.helpers.ICustomNameObject;
+import appeng.helpers.IInterfaceHost;
 import appeng.me.GridAccessException;
 import appeng.me.helpers.AENetworkProxy;
 import appeng.api.networking.security.IActionSource;
@@ -81,13 +83,21 @@ public class TileMEPatternAssembly extends MEMachineComponent
                    MachineComponentTileNotifiable,
                    ICraftingProvider,
                    IAEAppEngInventory,
-                   ICustomNameObject {
+                   ICustomNameObject,
+                   IInterfaceHost {
 
     public static final int PATTERNS = 36;
     public static final int SLOT_CATALYST_COUNT = PatternAssemblySlot.CATALYST_SLOTS;
 
     // 36 个样板槽（使用 AppEngInternalInventory 保持与原版一致）
     protected final AppEngInternalInventory patterns;
+
+    /**
+     * 接口终端（Interface Terminal）接入所需的 AE 接口二元体。
+     * 只用于向终端提供位置/排序/名称等信息，样板库存仍由本类的 patterns 提供
+     * （见 ContainerInterfaceTerminalMixin，它会把我们的样板库存注册进终端列表）。
+     */
+    private final DualityInterface duality;
 
     // 36 个 PatternAssemblySlot
     protected final PatternAssemblySlot[] slots = new PatternAssemblySlot[PATTERNS];
@@ -127,6 +137,82 @@ public class TileMEPatternAssembly extends MEMachineComponent
         this.aggregatedInputFluidHandler = new AggregatedInputFluidHandler();
         this.aggregatedOutputItemHandler = new AggregatedOutputItemHandler();
         this.aggregatedOutputFluidHandler = new AggregatedOutputFluidHandler();
+        // 与 MMCE 的 MEPatternProvider 相同：proxy 由基类字段初始化，此处已可用
+        this.duality = new AssemblyDuality(this.proxy, this);
+    }
+
+    /**
+     * 接口终端接入用的 DualityInterface。
+     * <p>
+     * DualityInterface.getInstalledUpgrades 读的是自身的升级库存（恒空），
+     * 而接口终端用它决定每行展示多少个样板槽（9 + 9×N）。
+     * 这里对 PATTERN_EXPANSION 恒报 3，让终端完整展示 36 个样板槽。
+     */
+    private static class AssemblyDuality extends DualityInterface {
+        AssemblyDuality(AENetworkProxy proxy, IInterfaceHost host) {
+            super(proxy, host);
+        }
+
+        @Override
+        public int getInstalledUpgrades(appeng.api.config.Upgrades upgrades) {
+            if (upgrades == appeng.api.config.Upgrades.PATTERN_EXPANSION) {
+                return 3;
+            }
+            return super.getInstalledUpgrades(upgrades);
+        }
+    }
+
+    // ==================== IInterfaceHost（接口终端可见性） ====================
+
+    @Override
+    public DualityInterface getInterfaceDuality() {
+        return duality;
+    }
+
+    @Override
+    public java.util.EnumSet<EnumFacing> getTargets() {
+        return java.util.EnumSet.allOf(EnumFacing.class);
+    }
+
+    @Override
+    public TileEntity getTileEntity() {
+        return this;
+    }
+
+    @Override
+    public int getInstalledUpgrades(appeng.api.config.Upgrades upgrades) {
+        // 与 MEPatternProvider 一致：视为满配 PATTERN_EXPANSION，终端展示全部 36 个样板槽
+        return 3;
+    }
+
+    @Override
+    public TileEntity getTile() {
+        return this;
+    }
+
+    @Override
+    public net.minecraftforge.items.IItemHandler getInventoryByName(String name) {
+        return duality.getInventoryByName(name);
+    }
+
+    @Override
+    public com.google.common.collect.ImmutableSet<appeng.api.networking.crafting.ICraftingLink> getRequestedJobs() {
+        return duality.getRequestedJobs();
+    }
+
+    @Override
+    public IAEItemStack injectCraftedItems(appeng.api.networking.crafting.ICraftingLink link, IAEItemStack items, appeng.api.config.Actionable mode) {
+        return duality.injectCraftedItems(link, items, mode);
+    }
+
+    @Override
+    public void jobStateChange(appeng.api.networking.crafting.ICraftingLink link) {
+        duality.jobStateChange(link);
+    }
+
+    @Override
+    public appeng.api.util.IConfigManager getConfigManager() {
+        return duality.getConfigManager();
     }
 
     // ==================== MachineComponentTile ====================
@@ -575,9 +661,6 @@ public class TileMEPatternAssembly extends MEMachineComponent
         // 搜索任务在异步线程逐个候选检查，最后检查的候选即胜出的候选，
         // 主线程随后的无事件复核依赖这个值定位到同一 slot。
         lastCheckedSlot = slotIndex;
-        if (slotIndex >= 0) {
-            applyCatalysts(event, slots[slotIndex]);
-        }
     }
 
     /**
@@ -757,6 +840,11 @@ public class TileMEPatternAssembly extends MEMachineComponent
                 if (required == null || required.amount <= 0) continue;
                 long available = slot.getInputFluidBuffer().getAmount(required.getFluid());
                 if (available < required.amount) {
+                    if (MMCEAdditionConfig.debugPatternAssembly) {
+                        MMCEAddition.LOGGER.debug("MEPatternAssembly at {} slot fluid check failed for {}: need {} mB of {}, have {} mB",
+                                getPos(), recipe.getRegistryName(), required.amount,
+                                required.getFluid().getName(), available);
+                    }
                     return false;
                 }
             }
@@ -810,102 +898,6 @@ public class TileMEPatternAssembly extends MEMachineComponent
     private static boolean itemStackMatchesIgnoreCount(@Nullable ItemStack a, @Nullable ItemStack b) {
         if (a == null || b == null || a.isEmpty() || b.isEmpty()) return false;
         return ItemStack.areItemsEqual(a, b) && ItemStack.areItemStackTagsEqual(a, b);
-    }
-
-    private void applyCatalysts(RecipeCheckEvent event, PatternAssemblySlot slot) {
-        if (!slot.hasAnyCatalyst()) return;
-
-        hellfirepvp.modularmachinery.common.crafting.helper.RecipeCraftingContext context = event.getContext();
-        hellfirepvp.modularmachinery.common.crafting.MachineRecipe recipe = context.getParentRecipe();
-        if (recipe == null) return;
-
-        // 构造一个只包含催化剂物品的虚拟 component 列表。
-        // RequirementCatalyst 的 canStartCrafting 需要看到原料存在才会添加 modifier。
-        // 催化剂 chance=0，不会真正被消耗，所以虚拟 handler 不减少实际库存。
-        List<hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent<?>> virtualComponents =
-                createCatalystComponents(slot);
-        if (virtualComponents.isEmpty()) return;
-
-        for (hellfirepvp.modularmachinery.common.crafting.helper.ComponentRequirement<?, ?> req : recipe.getCraftingRequirements()) {
-            if (req.getActionType() != IOType.INPUT) continue;
-            if (req instanceof hellfirepvp.modularmachinery.common.crafting.requirement.RequirementCatalyst) {
-                hellfirepvp.modularmachinery.common.crafting.requirement.RequirementCatalyst catalystReq =
-                        (hellfirepvp.modularmachinery.common.crafting.requirement.RequirementCatalyst) req;
-                catalystReq.canStartCrafting(virtualComponents, context);
-            }
-        }
-    }
-
-    private List<hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent<?>> createCatalystComponents(PatternAssemblySlot slot) {
-        List<hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent<?>> components = new ArrayList<>();
-        for (ItemStack catalyst : slot.getCatalysts()) {
-            if (catalyst.isEmpty()) continue;
-            net.minecraftforge.items.IItemHandlerModifiable virtualHandler = new CatalystItemHandler(catalyst);
-            MachineComponent.ItemBus component = new MachineComponent.ItemBus(IOType.INPUT) {
-                @Nonnull
-                @Override
-                public net.minecraftforge.items.IItemHandlerModifiable getContainerProvider() {
-                    return virtualHandler;
-                }
-            };
-            @SuppressWarnings("unchecked")
-            hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent<?> pc =
-                    new hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent<>(
-                            component, virtualHandler, null);
-            components.add(pc);
-        }
-        return components;
-    }
-
-    /**
-     * 只读虚拟物品 handler，用于向 RequirementCatalyst 展示催化剂存在。
-     * 由于催化剂 chance=0，MMCE 不会真正消耗物品，因此 extractItem 返回物品但不修改库存。
-     */
-    private static class CatalystItemHandler implements net.minecraftforge.items.IItemHandlerModifiable {
-        private final ItemStack catalyst;
-
-        CatalystItemHandler(@Nonnull ItemStack catalyst) {
-            this.catalyst = catalyst.copy();
-            this.catalyst.setCount(1);
-        }
-
-        @Override
-        public int getSlots() {
-            return 1;
-        }
-
-        @Nonnull
-        @Override
-        public ItemStack getStackInSlot(int slot) {
-            return slot == 0 ? catalyst.copy() : ItemStack.EMPTY;
-        }
-
-        @Nonnull
-        @Override
-        public ItemStack insertItem(int slot, @Nonnull ItemStack stack, boolean simulate) {
-            return stack.copy();
-        }
-
-        @Nonnull
-        @Override
-        public ItemStack extractItem(int slot, int amount, boolean simulate) {
-            if (slot == 0 && amount > 0) {
-                ItemStack result = catalyst.copy();
-                result.setCount(Math.min(amount, catalyst.getCount()));
-                return result;
-            }
-            return ItemStack.EMPTY;
-        }
-
-        @Override
-        public int getSlotLimit(int slot) {
-            return Integer.MAX_VALUE;
-        }
-
-        @Override
-        public void setStackInSlot(int slot, @Nonnull ItemStack stack) {
-            // 虚拟 handler 不接受设置
-        }
     }
 
     // ==================== 输出缓冲管理 ====================
@@ -1073,6 +1065,25 @@ public class TileMEPatternAssembly extends MEMachineComponent
                 copyBuffer.readFromNBT(bufferToNbt(slots[active].getInputItemBuffer()));
                 LongInputItemHandler copy = new LongInputItemHandler(copyBuffer);
                 copy.syncWithBuffer();
+                // 把该槽的催化剂作为只读展示槽附加到检查副本上：
+                // RequirementCatalyst 在配方检查/并行度计算中据此确认催化剂存在并注入 modifier，
+                // 真实 handler 不暴露催化剂，chance=0 也保证其永不被消耗。
+                ItemStack[] catalysts = slots[active].getCatalysts();
+                if (catalysts != null && catalysts.length > 0) {
+                    List<ItemStack> view = new ArrayList<>(catalysts.length);
+                    for (ItemStack catalyst : catalysts) {
+                        if (!catalyst.isEmpty()) {
+                            // 只展示 1 个：催化剂是"存在性"需求，展示实际数量会污染
+                            // 同物品输入需求的副本计数（检查副本与真实消耗必须一致）
+                            ItemStack single = catalyst.copy();
+                            single.setCount(1);
+                            view.add(single);
+                        }
+                    }
+                    if (!view.isEmpty()) {
+                        copy.setCatalystView(view.toArray(new ItemStack[0]));
+                    }
+                }
                 return copy;
             }
             LongInputItemHandler empty = new LongInputItemHandler(new LongItemBuffer());
@@ -1138,6 +1149,13 @@ public class TileMEPatternAssembly extends MEMachineComponent
         public void setStackInSlot(int slot, @Nonnull ItemStack stack) {
             int active = resolveActiveSlot();
             if (active >= 0 && active < PATTERNS) {
+                if (MMCEAdditionConfig.debugPatternAssembly) {
+                    // 真实消耗/写入的记账日志（副本是独立实例，不会走到这里）
+                    LongItemBuffer buf = slots[active].getInputItemBuffer();
+                    MMCEAddition.LOGGER.debug(
+                            "MEPatternAssembly at {} input write: slot={}, stack={}, bufferNow={}",
+                            getPos(), active, stack, buf.snapshot());
+                }
                 slots[active].getInputItemHandler().setStackInSlot(slot, stack);
             }
         }
@@ -1290,7 +1308,24 @@ public class TileMEPatternAssembly extends MEMachineComponent
         public void setStackInSlot(int slot, @Nonnull ItemStack stack) {
             int active = resolveActiveSlot();
             if (active >= 0 && active < PATTERNS) {
+                if (MMCEAdditionConfig.debugPatternAssembly && !stack.isEmpty()) {
+                    // 真实产出写入的记账日志（副本是独立实例，不会走到这里）
+                    LongItemBuffer buf = slots[active].getOutputItemBuffer();
+                    MMCEAddition.LOGGER.debug(
+                            "MEPatternAssembly at {} output write: slot={}, stack={} x{}, bufferNow={}",
+                            getPos(), active, stack.getDisplayName(), stack.getCount(), buf.snapshot());
+                }
                 slots[active].getOutputItemHandler().setStackInSlot(slot, stack);
+                return;
+            }
+            // MMCE 的 ItemUtils.insertAll 通过 setStackInSlot 落产物；
+            // 无法定位槽位时（极端时序）绝不能静默丢弃，回退写入 0 号槽的输出缓冲。
+            if (!stack.isEmpty()) {
+                if (MMCEAdditionConfig.debugPatternAssembly) {
+                    MMCEAddition.LOGGER.debug("MEPatternAssembly at {} output setStackInSlot with no active slot, fallback to slot 0: {} x{}",
+                            getPos(), stack.getDisplayName(), stack.getCount());
+                }
+                slots[0].getOutputItemHandler().setStackInSlot(slot, stack);
             }
         }
 

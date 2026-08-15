@@ -12,6 +12,9 @@ fluid output warehouse, and it is allowed to replace any output warehouse as the
 These two warehouses are designed to provide better performance in the integration package 
 of very many MMCE multi-party blocks
 
+修改了类似MBC的土味并行机制, 现在会自动识别并且修改为真并行.
+
+虚拟并行仓: 你是否已经厌倦了反反复复的堆量? 而并行仓要么不存在, 要么造价高昂. 现在你可以使用虚拟并行仓来避免这个问题. 虚拟并行仓提供了一个额外的并行乘区, 你可以把一个多方块完整的全部材料打包为一个机器数据, 放入虚拟并行仓会为其提供(原本并行)*(1+N)的并行.N 为匹配机器数据数量大小.
 ## 依赖
 
 - Minecraft 1.12.2
@@ -21,20 +24,9 @@ of very many MMCE multi-party blocks
 
 ## 未来更新计划
 新的仓室:
-- ME样板总成
-  - 支持智能翻倍
-  - 支持按照样板隔离
-  - 更大的样板槽位
-  - 允许异步输出
-  - 允许无线连接AE
-  - Long的输入缓存
-  - 支持各槽位独立催化剂
-  - 支持仅输入单个催化剂
 - ME样板总成镜像
 - 基础超频仓
 - 无损超频仓
-- ME库存输入总线
-  - 允许自动从AE拉取物品
 
 暂无,当然你可以向我提出需求,不保证一定会实现
 

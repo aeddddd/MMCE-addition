@@ -24,18 +24,21 @@ public abstract class RequirementFluidMixin {
     public float chance;
 
     @Shadow
-    public IOType actionType;
-
-    @Shadow
     private int doFluidIOInternal(List<ProcessingComponent<?>> components, RecipeCraftingContext context,
                                   int maxMultiplier) {
         throw new AssertionError("Shadow method");
     }
 
-    @Inject(method = "canStartCrafting", at = @At("HEAD"), cancellable = true)
+    /** actionType 声明在基类 ComponentRequirement 中，无法 @Shadow，直接转型调用。 */
+    private boolean mmceaddition$isNonConsumedInput() {
+        return ((RequirementFluid) (Object) this).getActionType() == IOType.INPUT && chance <= 0;
+    }
+
+    @Inject(method = "canStartCrafting(Ljava/util/List;Lhellfirepvp/modularmachinery/common/crafting/helper/RecipeCraftingContext;)Lhellfirepvp/modularmachinery/common/crafting/helper/CraftCheck;",
+            at = @At("HEAD"), cancellable = true)
     private void mmceaddition$nonConsumedCheck(List<ProcessingComponent<?>> components, RecipeCraftingContext context,
                                                CallbackInfoReturnable<CraftCheck> cir) {
-        if (actionType == IOType.INPUT && chance <= 0) {
+        if (mmceaddition$isNonConsumedInput()) {
             cir.setReturnValue(doFluidIOInternal(components, context, 1) >= 1
                     ? CraftCheck.success()
                     : CraftCheck.failure("craftcheck.failure.fluid.input"));
@@ -45,7 +48,7 @@ public abstract class RequirementFluidMixin {
     @Inject(method = "getMaxParallelism", at = @At("HEAD"), cancellable = true)
     private void mmceaddition$nonConsumedParallelism(List<ProcessingComponent<?>> components, RecipeCraftingContext context,
                                                      int maxParallelism, CallbackInfoReturnable<Integer> cir) {
-        if (actionType == IOType.INPUT && chance <= 0) {
+        if (mmceaddition$isNonConsumedInput()) {
             cir.setReturnValue(doFluidIOInternal(components, context, 1) >= 1 ? maxParallelism : 0);
         }
     }

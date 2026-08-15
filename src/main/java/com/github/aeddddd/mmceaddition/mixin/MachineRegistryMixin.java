@@ -2,6 +2,7 @@ package com.github.aeddddd.mmceaddition.mixin;
 
 import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
 import com.github.aeddddd.mmceaddition.parallel.FakeParallelMigrator;
+import com.github.aeddddd.mmceaddition.virtual.VirtualParallelManager;
 import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
 import hellfirepvp.modularmachinery.common.machine.MachineRegistry;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,6 +27,8 @@ public class MachineRegistryMixin {
         if (MMCEAdditionConfig.enableFakeParallelMigration) {
             FakeParallelMigrator.migrateMachines(machines);
         }
+        // 虚拟并行：为所有非黑名单机器打开原生并行开关并抬高机器级上限兜底
+        VirtualParallelManager.onMachinesRegistered(machines);
     }
 
     @Inject(method = "reloadMachine", at = @At("RETURN"), remap = false)
@@ -33,5 +36,6 @@ public class MachineRegistryMixin {
         if (MMCEAdditionConfig.enableFakeParallelMigration) {
             FakeParallelMigrator.migrateMachines(machines);
         }
+        VirtualParallelManager.onMachinesRegistered(machines);
     }
 }

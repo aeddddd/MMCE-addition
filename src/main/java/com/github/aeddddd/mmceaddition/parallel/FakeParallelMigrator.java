@@ -70,6 +70,13 @@ public final class FakeParallelMigrator {
     /** 已完成迁移扫描的机器对象（按身份），保证 /mm reload 重注册时幂等。 */
     private static final Set<DynamicMachine> MIGRATED = Collections.newSetFromMap(new IdentityHashMap<>());
 
+    /**
+     * 已成功强制打开配方并行开关的机器对象（按身份）。
+     * MMCE 先注册机器、后加载配方（CommonProxy 中 registerMachines 早于 loadRecipeRegistry），
+     * 迁移时机器的配方表还是空的，因此配方开关必须在配方加载完成后懒强制。
+     */
+    private static final Set<DynamicMachine> FORCED_RECIPES = Collections.newSetFromMap(new IdentityHashMap<>());
+
     /** AbstractModifierReplacement#modifier 的反射句柄（final 字段，用于整体替换列表）。 */
     private static Field modifierListField;
 
@@ -208,7 +215,7 @@ public final class FakeParallelMigrator {
 
         machine.setParallelizable(true);
         machine.setMaxParallelism(capFor(grants));
-        forceRecipesParallelized(machine);
+        ensureRecipesParallelized(machine);
 
         StringBuilder sb = new StringBuilder();
         for (Grant g : grants) {
@@ -256,7 +263,10 @@ public final class FakeParallelMigrator {
             }
         }
 
-        // 配对：同一 target 下 input 与 output 倍率相等 => 伪并行组
+        // 配对：input 与 output 倍率相等 => 伪并行组。
+        // 第一阶段限同一 target（物品×N ↔ 物品×N）；第二阶段允许物品/流体跨类型配对
+        // （物品输入×N ↔ 流体输出×N 也是典型的伪并行写法，只配同类型会漏掉一半组，
+        //  残留的 ×N modifier 会导致"消耗被放大但产出不变"的严重失衡）。
         Set<RecipeModifier> consumed = Collections.newSetFromMap(new IdentityHashMap<>());
         List<Integer> pairValues = new ArrayList<>();
         RecipeModifier firstPaired = null;
@@ -270,6 +280,40 @@ public final class FakeParallelMigrator {
                 for (RecipeModifier out : outs) {
                     if (!consumed.contains(out) && Float.compare(out.getModifier(), in.getModifier()) == 0) {
                         match = out;
+                        break;
+                    }
+                }
+                if (match != null) {
+                    consumed.add(in);
+                    consumed.add(match);
+                    pairValues.add(Math.round(in.getModifier()));
+                    if (firstPaired == null) {
+                        firstPaired = in;
+                    }
+                }
+            }
+        }
+        // 第二阶段：跨类型（仅物品/流体 target 之间）
+        for (Map.Entry<RequirementType<?, ?>, List<RecipeModifier>> entry : mulInputs.entrySet()) {
+            if (!isFakeParallelTarget(entry.getKey())) {
+                continue;
+            }
+            for (RecipeModifier in : entry.getValue()) {
+                if (consumed.contains(in)) {
+                    continue;
+                }
+                RecipeModifier match = null;
+                for (Map.Entry<RequirementType<?, ?>, List<RecipeModifier>> outEntry : mulOutputs.entrySet()) {
+                    if (outEntry.getKey() == entry.getKey() || !isFakeParallelTarget(outEntry.getKey())) {
+                        continue;
+                    }
+                    for (RecipeModifier out : outEntry.getValue()) {
+                        if (!consumed.contains(out) && Float.compare(out.getModifier(), in.getModifier()) == 0) {
+                            match = out;
+                            break;
+                        }
+                    }
+                    if (match != null) {
                         break;
                     }
                 }
@@ -297,6 +341,22 @@ public final class FakeParallelMigrator {
                 MMCEAddition.LOGGER.warn("伪并行迁移: 机器 {} 元件 {} 内存在不同倍率的成对 modifier（{} 与 {}），取最大值 {}",
                         machine.getRegistryName(), rep.getModifierName(), v, n, n);
                 break;
+            }
+        }
+
+        // 伪并行组已确认：同倍率的物品/流体输入/输出乘法 modifier 全部视为组成员摘除，
+        // 即使它没能配成对（例如输入有物品+流体两种、输出只有物品）。
+        // 残留的 ×N 输入 modifier 会在原生并行之上再放大一次消耗，必须清理干净。
+        for (RecipeModifier m : mods) {
+            if (consumed.contains(m) || m == null
+                    || m.getOperation() != RecipeModifier.OPERATION_MULTIPLY
+                    || m.affectsChance()
+                    || !isFakeParallelTarget(m.getTarget())
+                    || (m.getIOTarget() != IOType.INPUT && m.getIOTarget() != IOType.OUTPUT)) {
+                continue;
+            }
+            if (Math.round(m.getModifier()) == n) {
+                consumed.add(m);
             }
         }
 
@@ -352,9 +412,33 @@ public final class FakeParallelMigrator {
     }
 
     /**
-     * 把该机器的所有配方标记为可并行（MMCE 的配方级开关，无公开 setter，走反射）。
+     * 强制打开该机器所有配方的并行开关（幂等，可反复调用直到配方加载完成）。
+     * <p>
+     * 配方晚于机器注册加载，迁移时调用通常还拿不到配方；控制器查询并行度时
+     * （{@code ParallelismControllerMixin}）会再次懒调用本方法兜底。
      */
-    private static void forceRecipesParallelized(DynamicMachine machine) {
+    public static void ensureRecipesParallelized(DynamicMachine machine) {
+        if (machine == null || !hasGrants(machine)) {
+            return;
+        }
+        synchronized (FORCED_RECIPES) {
+            if (FORCED_RECIPES.contains(machine)) {
+                return;
+            }
+            // 只有真正标记到配方才算完成；配方尚未加载时留待下次重试
+            if (forceRecipesParallelized(machine) > 0) {
+                FORCED_RECIPES.add(machine);
+            }
+        }
+    }
+
+    /**
+     * 把该机器的所有配方标记为可并行（MMCE 的配方级开关，无公开 setter，走反射）。
+     *
+     * @return 实际标记的配方数量
+     */
+    private static int forceRecipesParallelized(DynamicMachine machine) {
+        int flagged = 0;
         try {
             if (recipeParallelizedField == null) {
                 recipeParallelizedField = MachineRecipe.class.getDeclaredField("parallelized");
@@ -362,11 +446,13 @@ public final class FakeParallelMigrator {
             }
             for (MachineRecipe recipe : machine.getAvailableRecipes()) {
                 recipeParallelizedField.setBoolean(recipe, true);
+                flagged++;
             }
         } catch (Exception e) {
             MMCEAddition.LOGGER.warn("伪并行迁移: 无法设置机器 {} 的配方并行标志，若并行未生效请检查 MMCE 配置 recipeParallelizeEnabledByDefault",
                     machine.getRegistryName(), e);
         }
+        return flagged;
     }
 
     private static void setModifierList(AbstractModifierReplacement rep, List<RecipeModifier> newList) {
@@ -379,6 +465,12 @@ public final class FakeParallelMigrator {
         } catch (Exception e) {
             throw new IllegalStateException("无法替换 modifier 列表: " + rep.getModifierName(), e);
         }
+    }
+
+    /** 伪并行组只允许物品/流体类 target 参与（能量、耗时等 modifier 绝不配对）。 */
+    private static boolean isFakeParallelTarget(RequirementType<?, ?> target) {
+        return target == hellfirepvp.modularmachinery.common.lib.RequirementTypesMM.REQUIREMENT_ITEM
+                || target == hellfirepvp.modularmachinery.common.lib.RequirementTypesMM.REQUIREMENT_FLUID;
     }
 
     private static Strategy strategy() {

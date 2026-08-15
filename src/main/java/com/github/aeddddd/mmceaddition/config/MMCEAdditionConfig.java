@@ -135,6 +135,59 @@ public class MMCEAdditionConfig {
     public static boolean debugFakeParallelMigration = false;
 
     /**
+     * 是否启用虚拟并行体系（虚拟装配台 + 机器数据 + 虚拟并行仓）。
+     */
+    @Config.Name("enable_virtual_parallel")
+    @Config.Comment("启用虚拟并行体系：虚拟装配台把多方块机器装配为机器数据，放入虚拟并行仓提供独立乘区并行度")
+    @Config.LangKey("config.mmceaddition.enable_virtual_parallel")
+    public static boolean enableVirtualParallel = true;
+
+    /**
+     * 虚拟并行全局上限（int）。
+     * <p>
+     * 最终并行度 = 其他并行 × (1 + 虚拟并行仓并行)，再经本上限钳制。
+     * 内部以 long 累乘防溢出；默认为 int 上限（即不限制），整合包可自行下调。
+     */
+    @Config.Name("virtual_parallel_cap")
+    @Config.Comment("虚拟并行乘区的全局并行度上限（int 范围）。最终并行度经此钳制。默认 int 上限 = 不限制")
+    @Config.RangeInt(min = 1, max = Integer.MAX_VALUE)
+    @Config.LangKey("config.mmceaddition.virtual_parallel_cap")
+    public static int virtualParallelCap = Integer.MAX_VALUE;
+
+    /**
+     * 虚拟并行机器黑名单：不生成机器数据、不提供虚拟并行。
+     */
+    @Config.Name("virtual_parallel_machine_blacklist")
+    @Config.Comment("不参与虚拟并行的机器注册名列表（完整名或路径均可）：不可装配为机器数据，虚拟仓对其无效")
+    @Config.LangKey("config.mmceaddition.virtual_parallel_machine_blacklist")
+    public static String[] virtualParallelMachineBlacklist = new String[0];
+
+    /**
+     * 虚拟装配台缓存槽数量（每槽 int 上限；面向极大多方块，默认 216）。
+     */
+    @Config.Name("virtual_assembler_buffer_slots")
+    @Config.Comment("虚拟装配台内部材料缓存槽数量（每槽计数上限为 int）")
+    @Config.RangeInt(min = 27, max = 1024)
+    @Config.LangKey("config.mmceaddition.virtual_assembler_buffer_slots")
+    public static int virtualAssemblerBufferSlots = 216;
+
+    /**
+     * 是否允许虚拟并行仓替换机器 JSON 中任意仓室位置。
+     */
+    @Config.Name("enable_virtual_hatch_compat")
+    @Config.Comment("允许虚拟并行仓替换原 MMCE 各类物品/流体/能源仓室及 ME Pattern Provider 的结构位置（无需修改机器 JSON）")
+    @Config.LangKey("config.mmceaddition.enable_virtual_hatch_compat")
+    public static boolean enableVirtualHatchCompat = true;
+
+    /**
+     * 是否输出虚拟并行调试日志。
+     */
+    @Config.Name("debug_virtual_parallel")
+    @Config.Comment("输出虚拟并行调试日志（材料清单生成、虚拟系数计算）")
+    @Config.LangKey("config.mmceaddition.debug_virtual_parallel")
+    public static boolean debugVirtualParallel = false;
+
+    /**
      * 配置变更事件处理器。
      * <p>
      * 当玩家在游戏内点击“Done”保存配置时，Forge 会触发 {@link ConfigChangedEvent.OnConfigChangedEvent}。

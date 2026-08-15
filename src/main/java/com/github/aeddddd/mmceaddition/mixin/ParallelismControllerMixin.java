@@ -1,7 +1,10 @@
 package com.github.aeddddd.mmceaddition.mixin;
 
+import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
 import com.github.aeddddd.mmceaddition.parallel.FakeParallelMigrator;
 import com.github.aeddddd.mmceaddition.parallel.IMigratedParallelismHolder;
+import com.github.aeddddd.mmceaddition.virtual.MachineMaterialAnalyzer;
+import com.github.aeddddd.mmceaddition.virtual.VirtualParallelManager;
 import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
 import hellfirepvp.modularmachinery.common.tiles.base.TileMultiblockMachineController;
 import org.spongepowered.asm.mixin.Mixin;
@@ -44,22 +47,48 @@ public abstract class ParallelismControllerMixin implements IMigratedParallelism
     @Inject(method = "getMaxParallelism()I", at = @At("RETURN"), cancellable = true, remap = false)
     private void mmceaddition$applyMigratedParallelism(CallbackInfoReturnable<Integer> cir) {
         DynamicMachine machine = this.foundMachine;
-        if (machine == null || !FakeParallelMigrator.hasGrants(machine)) {
+        if (machine == null) {
             return;
         }
 
-        int migrated = this.mmceaddition$migratedParallelism;
-        if (migrated < 0) {
-            // 惰性计算：computeForController 只读 foundModifiers（ConcurrentHashMap），异步线程安全
-            migrated = FakeParallelMigrator.computeForController((TileMultiblockMachineController) (Object) this);
-            this.mmceaddition$migratedParallelism = migrated;
-        }
-        if (migrated <= 1) {
-            return;
+        int value = cir.getReturnValue();
+
+        // ---- 伪并行迁移乘区 ----
+        if (FakeParallelMigrator.hasGrants(machine)) {
+            // MMCE 先注册机器、后加载配方，迁移时还拿不到配方对象，
+            // 因此配方级并行开关（MachineRecipe#parallelized）在这里懒强制。
+            FakeParallelMigrator.ensureRecipesParallelized(machine);
+
+            int migrated = this.mmceaddition$migratedParallelism;
+            if (migrated < 0) {
+                // 惰性计算：computeForController 只读 foundModifiers（ConcurrentHashMap），异步线程安全
+                migrated = FakeParallelMigrator.computeForController((TileMultiblockMachineController) (Object) this);
+                this.mmceaddition$migratedParallelism = migrated;
+            }
+            if (migrated > 1) {
+                int cap = machine.getMaxParallelism();
+                int migratedValue = cap > 0 ? Math.min(migrated, cap) : migrated;
+                if (migratedValue > value) {
+                    value = migratedValue;
+                }
+            }
         }
 
-        int cap = machine.getMaxParallelism();
-        int value = cap > 0 ? Math.min(migrated, cap) : migrated;
+        // ---- 虚拟并行乘区：最终并行 = 其他并行 × (1 + N)，N 为匹配机器数据数量之和 ----
+        if (MMCEAdditionConfig.enableVirtualParallel && !MachineMaterialAnalyzer.isBlacklisted(machine)) {
+            VirtualParallelManager.ensureRecipesParallelized(machine);
+            int factor = VirtualParallelManager.computeVirtualFactor((TileMultiblockMachineController) (Object) this);
+            if (factor > 0) {
+                // long 累乘防溢出，最终钳制到配置的全局上限
+                long multiplied = (long) value * (1L + factor);
+                int virtualCap = Math.max(1, MMCEAdditionConfig.virtualParallelCap);
+                int virtualValue = (int) Math.min(multiplied, virtualCap);
+                if (virtualValue > value) {
+                    value = virtualValue;
+                }
+            }
+        }
+
         if (value > cir.getReturnValue()) {
             cir.setReturnValue(value);
         }
