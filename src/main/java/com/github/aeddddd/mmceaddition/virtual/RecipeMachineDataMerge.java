@@ -31,13 +31,20 @@ public class RecipeMachineDataMerge extends IForgeRegistryEntry.Impl<IRecipe> im
             return ItemStack.EMPTY;
         }
         long sum = 0;
+        java.util.Map<String, Integer> upgrades = new java.util.LinkedHashMap<>();
         for (int i = 0; i < inv.getSizeInventory(); i++) {
             ItemStack stack = inv.getStackInSlot(i);
             if (!stack.isEmpty()) {
                 sum += ItemMachineData.getCount(stack);
+                // 升级记录一并合并（数量相加）
+                for (java.util.Map.Entry<String, Integer> entry : ItemMachineData.getUpgrades(stack).entrySet()) {
+                    upgrades.merge(entry.getKey(), entry.getValue(), Integer::sum);
+                }
             }
         }
-        return ItemMachineData.createStack(target.machineName, (int) Math.min(sum, Integer.MAX_VALUE));
+        ItemStack result = ItemMachineData.createStack(target.machineName, (int) Math.min(sum, Integer.MAX_VALUE));
+        ItemMachineData.addUpgrades(result, upgrades);
+        return result;
     }
 
     @Override

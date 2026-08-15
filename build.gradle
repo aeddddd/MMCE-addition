@@ -20,7 +20,7 @@ buildscript {
 apply plugin: 'net.minecraftforge.gradle.forge'
 
 // 模组版本、Maven 坐标、构建产物名。
-version = '1.1beta'
+version = '1.2beta'
 group = 'com.github.aeddddd'
 archivesBaseName = 'MMCE-addition'
 

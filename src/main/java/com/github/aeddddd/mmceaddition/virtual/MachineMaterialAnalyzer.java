@@ -5,6 +5,7 @@ import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
 import com.github.aeddddd.mmceaddition.util.ItemVariant;
 import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
 import hellfirepvp.modularmachinery.common.machine.TaggedPositionBlockArray;
+import hellfirepvp.modularmachinery.common.modifier.SingleBlockModifierReplacement;
 import hellfirepvp.modularmachinery.common.util.BlockArray;
 import hellfirepvp.modularmachinery.common.util.IBlockStateDescriptor;
 import net.minecraft.block.Block;
@@ -13,14 +14,19 @@ import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.math.BlockPos;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
  * 机器材料清单生成器。
@@ -29,11 +35,12 @@ import java.util.Map;
  * <ul>
  *   <li>控制器 ×1（{@code modularmachinery:blockcontroller}）</li>
  *   <li>结构中每个位置按其允许的方块集合生成一个原料组；
- *       仓室方块（各类输入/输出总线、流体仓、能源仓、ME 样板供应器）从候选中剔除，
- *       剔除后无剩余候选的位置视为纯仓室位置，整组跳过</li>
- *   <li>歧义位置（一个位置允许多种方块）保留全部候选，装配时任意一种均可抵扣</li>
- *   <li>候选集合完全相同的原料组合并计数（如 500 个外壳位置合并为 外壳 x500）</li>
+ *       仓室方块从候选中剔除，剔除后无剩余候选的位置视为纯仓室位置，整组跳过</li>
+ *   <li>歧义位置保留全部候选，装配时任意一种均可抵扣</li>
+ *   <li>候选集合完全相同的原料组合并计数</li>
  * </ul>
+ * 同时提取机器的单方块升级定义（{@code modifiers} 块）：每个升级占据一个结构位置，
+ * 装配时缓存槽中的升级方块会按"替换式"自动顶替该位置的基础材料并记录进机器数据。
  * 机器 JSON 重载（/mm reload）后机器对象被重建，缓存按对象身份失效。
  */
 public final class MachineMaterialAnalyzer {
@@ -48,18 +55,15 @@ public final class MachineMaterialAnalyzer {
             this.count = count;
         }
 
-        /** 候选物品列表（多选一语义）。 */
         @Nonnull
         public List<ItemStack> getCandidates() {
             return candidates;
         }
 
-        /** 单台机器需要的数量。 */
         public int getCount() {
             return count;
         }
 
-        /** 给定物品是否能抵扣本组需求。 */
         public boolean accepts(@Nonnull ItemStack stack) {
             ItemVariant variant = new ItemVariant(stack);
             for (ItemStack candidate : candidates) {
@@ -71,8 +75,57 @@ public final class MachineMaterialAnalyzer {
         }
     }
 
-    /** 机器对象身份 → 材料清单缓存（机器对象在 /mm reload 后重建，缓存自然失效）。 */
-    private static final Map<DynamicMachine, List<IngredientGroup>> CACHE = new java.util.WeakHashMap<>();
+    /**
+     * 一条单方块升级定义：结构中被该升级替换的位置所属原料组 + 升级方块候选。
+     * baseGroupIndex = -1 表示该位置不在基础结构中（纯附加，不顶替基础材料）。
+     */
+    public static final class UpgradeInfo {
+        private final String modifierName;
+        private final String displayName;
+        private final List<ItemStack> candidates;
+        private final int baseGroupIndex;
+
+        public UpgradeInfo(String modifierName, String displayName, List<ItemStack> candidates, int baseGroupIndex) {
+            this.modifierName = modifierName;
+            this.displayName = displayName;
+            this.candidates = candidates;
+            this.baseGroupIndex = baseGroupIndex;
+        }
+
+        @Nonnull
+        public String getModifierName() {
+            return modifierName;
+        }
+
+        @Nonnull
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        @Nonnull
+        public List<ItemStack> getCandidates() {
+            return candidates;
+        }
+
+        public int getBaseGroupIndex() {
+            return baseGroupIndex;
+        }
+
+        public boolean accepts(@Nonnull ItemStack stack) {
+            ItemVariant variant = new ItemVariant(stack);
+            for (ItemStack candidate : candidates) {
+                if (new ItemVariant(candidate).equals(variant)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /** 机器对象身份 → 材料清单缓存。 */
+    private static final Map<DynamicMachine, List<IngredientGroup>> CACHE = new WeakHashMap<>();
+    /** 机器对象身份 → 升级定义缓存。 */
+    private static final Map<DynamicMachine, List<UpgradeInfo>> UPGRADE_CACHE = new WeakHashMap<>();
 
     private MachineMaterialAnalyzer() {
     }
@@ -102,38 +155,63 @@ public final class MachineMaterialAnalyzer {
             if (cached != null) {
                 return cached;
             }
-            List<IngredientGroup> result = doAnalyze(machine);
-            CACHE.put(machine, result);
-            return result;
+            AnalysisResult result = doAnalyze(machine);
+            CACHE.put(machine, result.groups);
+            UPGRADE_CACHE.put(machine, result.upgrades);
+            return result.groups;
         }
     }
 
+    /**
+     * 该机器的单方块升级定义列表（需先 analyze 过；未 analyze 时即时分析）。
+     */
     @Nonnull
-    private static List<IngredientGroup> doAnalyze(@Nonnull DynamicMachine machine) {
+    public static List<UpgradeInfo> upgradesFor(@Nonnull DynamicMachine machine) {
+        synchronized (CACHE) {
+            List<UpgradeInfo> cached = UPGRADE_CACHE.get(machine);
+            if (cached != null) {
+                return cached;
+            }
+            analyze(machine);
+            return UPGRADE_CACHE.getOrDefault(machine, Collections.emptyList());
+        }
+    }
+
+    private static final class AnalysisResult {
+        List<IngredientGroup> groups = Collections.emptyList();
+        List<UpgradeInfo> upgrades = Collections.emptyList();
+    }
+
+    @Nonnull
+    private static AnalysisResult doAnalyze(@Nonnull DynamicMachine machine) {
+        AnalysisResult result = new AnalysisResult();
         if (isBlacklisted(machine)) {
-            return new ArrayList<>();
+            return result;
         }
 
         // 候选集合签名 → 聚合中的原料组
         Map<String, GroupBuilder> groups = new LinkedHashMap<>();
+        // 结构位置 → 所属原料组签名（供升级定位替换目标）
+        Map<BlockPos, String> positionGroup = new LinkedHashMap<>();
 
         // 控制器本身不在结构 pattern 中，单独计 1 份
         ItemStack controller = controllerStack();
         if (controller != null) {
             groups.put(signatureOf(singletonVariant(controller)),
-                    new GroupBuilder(new ArrayList<>(java.util.Collections.singletonList(controller)), 1));
+                    new GroupBuilder(new ArrayList<>(Collections.singletonList(controller)), 1));
         }
 
         TaggedPositionBlockArray pattern = machine.getPattern();
         if (pattern == null) {
-            return finish(groups);
+            result.groups = finish(groups);
+            return result;
         }
 
-        for (BlockArray.BlockInformation info : pattern.getPattern().values()) {
+        for (Map.Entry<BlockPos, BlockArray.BlockInformation> entry : pattern.getPattern().entrySet()) {
+            BlockArray.BlockInformation info = entry.getValue();
             if (info == null || info.getMatchingStates() == null) {
                 continue;
             }
-            // 展开该位置的全部候选方块，剔除仓室方块
             Map<ItemVariant, ItemStack> candidates = new LinkedHashMap<>();
             for (IBlockStateDescriptor descriptor : info.getMatchingStates()) {
                 if (descriptor == null || descriptor.getApplicable() == null) {
@@ -151,7 +229,6 @@ public final class MachineMaterialAnalyzer {
                 }
             }
             if (candidates.isEmpty()) {
-                // 纯仓室位置：跳过
                 continue;
             }
             String signature = signatureOf(candidates.keySet());
@@ -161,11 +238,64 @@ public final class MachineMaterialAnalyzer {
             } else {
                 builder.count++;
             }
+            positionGroup.put(entry.getKey(), signature);
         }
 
-        List<IngredientGroup> result = finish(groups);
+        List<IngredientGroup> groupList = finish(groups);
+        // 签名 → 原料组下标（供升级定位）
+        Map<String, Integer> groupIndex = new LinkedHashMap<>();
+        int idx = 0;
+        for (String signature : groups.keySet()) {
+            groupIndex.put(signature, idx++);
+        }
+        result.groups = groupList;
+
+        // 提取单方块升级定义（替换式：升级方块顶替被替换位置的基础材料）
+        List<UpgradeInfo> upgrades = new ArrayList<>();
+        Set<String> seenUpgrades = new HashSet<>();
+        for (List<SingleBlockModifierReplacement> list : machine.getModifiers().values()) {
+            for (SingleBlockModifierReplacement rep : list) {
+                if (rep == null || rep.getBlockInformation() == null || rep.getPos() == null) {
+                    continue;
+                }
+                // 同名升级可能定义在多个位置：每位置一条（顶替各自的基础材料），按 位置+名称 去重
+                String key = rep.getModifierName() + "@" + rep.getPos();
+                if (!seenUpgrades.add(key)) {
+                    continue;
+                }
+                Map<ItemVariant, ItemStack> candidates = new LinkedHashMap<>();
+                if (rep.getBlockInformation().getMatchingStates() != null) {
+                    for (IBlockStateDescriptor descriptor : rep.getBlockInformation().getMatchingStates()) {
+                        if (descriptor == null || descriptor.getApplicable() == null) {
+                            continue;
+                        }
+                        for (IBlockState applicable : descriptor.getApplicable()) {
+                            if (applicable == null) {
+                                continue;
+                            }
+                            ItemStack stack = toStack(applicable);
+                            if (stack != null) {
+                                candidates.putIfAbsent(new ItemVariant(stack), stack);
+                            }
+                        }
+                    }
+                }
+                if (candidates.isEmpty()) {
+                    continue;
+                }
+                String sig = positionGroup.get(rep.getPos());
+                int baseGroup = sig == null ? -1 : groupIndex.getOrDefault(sig, -1);
+                String display = rep.getDescriptionLines() != null && !rep.getDescriptionLines().isEmpty()
+                        ? rep.getDescriptionLines().get(0) : rep.getModifierName();
+                upgrades.add(new UpgradeInfo(rep.getModifierName(), display,
+                        new ArrayList<>(candidates.values()), baseGroup));
+            }
+        }
+        result.upgrades = Collections.unmodifiableList(upgrades);
+
         if (MMCEAdditionConfig.debugVirtualParallel) {
-            MMCEAddition.LOGGER.info("虚拟装配: 机器 {} 材料清单 {} 组", machine.getRegistryName(), result.size());
+            MMCEAddition.LOGGER.info("虚拟装配: 机器 {} 材料清单 {} 组, 升级定义 {} 条",
+                    machine.getRegistryName(), groupList.size(), upgrades.size());
         }
         return result;
     }
@@ -176,7 +306,7 @@ public final class MachineMaterialAnalyzer {
         for (GroupBuilder builder : groups.values()) {
             result.add(new IngredientGroup(builder.candidates, builder.count));
         }
-        return java.util.Collections.unmodifiableList(result);
+        return Collections.unmodifiableList(result);
     }
 
     private static final class GroupBuilder {
@@ -243,8 +373,8 @@ public final class MachineMaterialAnalyzer {
     }
 
     @Nonnull
-    private static java.util.Set<ItemVariant> singletonVariant(@Nonnull ItemStack stack) {
-        java.util.Set<ItemVariant> set = new java.util.HashSet<>();
+    private static Set<ItemVariant> singletonVariant(@Nonnull ItemStack stack) {
+        Set<ItemVariant> set = new HashSet<>();
         set.add(new ItemVariant(stack));
         return set;
     }
@@ -260,7 +390,7 @@ public final class MachineMaterialAnalyzer {
             ResourceLocation reg = stack.getItem().getRegistryName();
             keys.add((reg == null ? "?" : reg.toString()) + "@" + stack.getMetadata());
         }
-        java.util.Collections.sort(keys);
+        Collections.sort(keys);
         return String.join("|", keys);
     }
 }

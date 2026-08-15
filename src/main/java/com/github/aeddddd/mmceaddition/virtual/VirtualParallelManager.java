@@ -105,7 +105,7 @@ public final class VirtualParallelManager {
                     continue;
                 }
                 if (machineName.equals(ItemMachineData.getMachineName(data))) {
-                    sum += ItemMachineData.getCount(data);
+                    sum += effectiveParallelism(machine, data);
                     if (sum >= cap) {
                         return cap;
                     }
@@ -116,6 +116,25 @@ public final class VirtualParallelManager {
             // 异步线程与主线程并发读写集合的极端情况：保守不放大
             return 0;
         }
+    }
+
+    /**
+     * 单份机器数据的有效并行贡献：
+     * 记录了升级时 N = Σ(升级数量 × 该升级的迁移并行度)（替代机器数量）；
+     * 无升级记录时 N = 内部存储的机器数量（向后兼容）。
+     * 非并行类升级对 N 贡献 0，其效果由 {@code DynamicMachineMixin} 注入配方上下文真实生效。
+     */
+    public static long effectiveParallelism(DynamicMachine machine, ItemStack data) {
+        java.util.Map<String, Integer> upgrades = ItemMachineData.getUpgrades(data);
+        if (upgrades.isEmpty()) {
+            return ItemMachineData.getCount(data);
+        }
+        long sum = 0;
+        for (java.util.Map.Entry<String, Integer> entry : upgrades.entrySet()) {
+            sum += (long) entry.getValue()
+                    * com.github.aeddddd.mmceaddition.parallel.FakeParallelMigrator.parallelismFor(machine, entry.getKey());
+        }
+        return sum;
     }
 
     /**

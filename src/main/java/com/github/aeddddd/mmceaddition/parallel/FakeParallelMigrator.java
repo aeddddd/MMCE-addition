@@ -116,6 +116,24 @@ public final class FakeParallelMigrator {
     }
 
     /**
+     * 查询某机器某元件（modifierName）迁移后的并行度授权；无授权返回 0。
+     * 供虚拟并行体系把机器数据中记录的升级折算为并行度。
+     */
+    public static int parallelismFor(DynamicMachine machine, String modifierName) {
+        List<Grant> grants = GRANTS.get(machine.getRegistryName().toString());
+        if (grants == null || modifierName == null) {
+            return 0;
+        }
+        int parallelism = 0;
+        for (Grant g : grants) {
+            if (g.modifierName.equals(modifierName)) {
+                parallelism = Math.max(parallelism, g.parallelism);
+            }
+        }
+        return parallelism;
+    }
+
+    /**
      * 按当前结构中实际匹配的元件，计算控制器此刻的有效并行度。
      * <p>
      * 只读取控制器内存中的 foundModifiers（ConcurrentHashMap），

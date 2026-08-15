@@ -147,6 +147,29 @@ public class GuiVirtualAssembler extends GuiContainer {
         int k = container.getAssembleCount();
         String info = I18n.format("gui.virtualassembler.available", k) + (k >= 32767 ? "+" : "");
         fontRenderer.drawString(info, MAT_X, 108, k > 0 ? 0x1B7A1B : 0x808080);
+
+        // 选中机器的可载入升级位（装配时缓存槽中的升级方块自动替换式顶替并记录）
+        DynamicMachine machine = selectedMachine();
+        if (machine != null) {
+            List<MachineMaterialAnalyzer.UpgradeInfo> upgrades = MachineMaterialAnalyzer.upgradesFor(machine);
+            if (!upgrades.isEmpty()) {
+                // 同名升级合并显示位数
+                java.util.Map<String, Integer> byName = new java.util.LinkedHashMap<>();
+                for (MachineMaterialAnalyzer.UpgradeInfo upgrade : upgrades) {
+                    byName.merge(upgrade.getDisplayName(), 1, Integer::sum);
+                }
+                StringBuilder sb = new StringBuilder();
+                for (java.util.Map.Entry<String, Integer> entry : byName.entrySet()) {
+                    if (sb.length() > 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(entry.getKey()).append(" x").append(entry.getValue());
+                }
+                String line = fontRenderer.trimStringToWidth(
+                        I18n.format("gui.virtualassembler.upgrades", sb.toString()), 128);
+                fontRenderer.drawString(line, MAT_X, 118, 0x606060);
+            }
+        }
     }
 
     private void drawMachineList() {

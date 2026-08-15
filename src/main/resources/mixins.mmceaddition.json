@@ -6,6 +6,7 @@
     "BlockInformationMixin",
     "ContainerInterfaceTerminalMixin",
     "CraftingCPUClusterMixin",
+    "DynamicMachineMixin",
     "MachineRegistryMixin",
     "ParallelismControllerMixin",
     "RecipeCraftingContextMixin",

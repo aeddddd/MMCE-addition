@@ -46,12 +46,16 @@ public class GuiVirtualParallelHatch extends GuiContainer {
         if (data.isEmpty()) {
             fontRenderer.drawString(I18n.format("gui.virtualparallelhatch.empty"), 8, 56, 0x808080);
         } else {
-            int count = ItemMachineData.getCount(data);
             String machineName = ItemMachineData.getMachineName(data);
             fontRenderer.drawString(I18n.format("gui.virtualparallelhatch.machine",
                     ItemMachineData.machineDisplayName(machineName)), 8, 56, 0x404040);
             if (container2.isMatchedSynced()) {
-                fontRenderer.drawString(I18n.format("gui.virtualparallelhatch.active", count), 8, 66, 0x1B7A1B);
+                // 有效并行贡献：有升级记录时 N = Σ升级贡献（替代机器数量），否则为机器数量
+                hellfirepvp.modularmachinery.common.machine.DynamicMachine machine =
+                        ItemMachineData.resolveMachine(machineName);
+                long n = machine == null ? ItemMachineData.getCount(data)
+                        : com.github.aeddddd.mmceaddition.virtual.VirtualParallelManager.effectiveParallelism(machine, data);
+                fontRenderer.drawString(I18n.format("gui.virtualparallelhatch.active", n), 8, 66, 0x1B7A1B);
             } else {
                 fontRenderer.drawString(I18n.format("gui.virtualparallelhatch.inactive"), 8, 66, 0xA03030);
             }

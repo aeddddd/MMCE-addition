@@ -32,6 +32,8 @@ public class ItemMachineData extends Item {
 
     private static final String TAG_MACHINE = "machine";
     private static final String TAG_COUNT = "count";
+    /** 升级记录：modifier 名 → 数量（装配时缓存槽中的升级方块替换式载入）。 */
+    private static final String TAG_UPGRADES = "upgrades";
 
     public ItemMachineData() {
         setTranslationKey(MMCEAddition.MODID + ".machine_data");
@@ -79,6 +81,50 @@ public class ItemMachineData extends Item {
         return tag.getInteger(TAG_COUNT);
     }
 
+    /**
+     * 读取升级记录（modifier 名 → 数量）；无记录时返回空 map。
+     */
+    @Nonnull
+    public static java.util.Map<String, Integer> getUpgrades(@Nonnull ItemStack stack) {
+        java.util.Map<String, Integer> result = new java.util.LinkedHashMap<>();
+        NBTTagCompound tag = stack.getTagCompound();
+        if (tag == null || !tag.hasKey(TAG_UPGRADES)) {
+            return result;
+        }
+        NBTTagCompound upgrades = tag.getCompoundTag(TAG_UPGRADES);
+        for (String key : upgrades.getKeySet()) {
+            result.put(key, upgrades.getInteger(key));
+        }
+        return result;
+    }
+
+    /**
+     * 合并写入升级记录（数量相加）。
+     */
+    public static void addUpgrades(@Nonnull ItemStack stack, @Nonnull java.util.Map<String, Integer> toAdd) {
+        if (toAdd.isEmpty()) {
+            return;
+        }
+        NBTTagCompound tag = stack.getTagCompound();
+        if (tag == null) {
+            tag = new NBTTagCompound();
+            stack.setTagCompound(tag);
+        }
+        NBTTagCompound upgrades = tag.getCompoundTag(TAG_UPGRADES);
+        for (java.util.Map.Entry<String, Integer> entry : toAdd.entrySet()) {
+            long merged = (long) upgrades.getInteger(entry.getKey()) + entry.getValue();
+            upgrades.setInteger(entry.getKey(), (int) Math.min(merged, Integer.MAX_VALUE));
+        }
+        tag.setTag(TAG_UPGRADES, upgrades);
+    }
+
+    /**
+     * 是否记录了升级（记录存在时，x(1+N) 的 N = Σ升级贡献，替代机器数量）。
+     */
+    public static boolean hasUpgrades(@Nonnull ItemStack stack) {
+        NBTTagCompound tag = stack.getTagCompound();
+        return tag != null && tag.hasKey(TAG_UPGRADES) && !tag.getCompoundTag(TAG_UPGRADES).isEmpty();
+    }
     /**
      * 设置内部存储的机器数量（钳制到 [1, Integer.MAX_VALUE]）。
      */
@@ -137,6 +183,19 @@ public class ItemMachineData extends Item {
         if (machineName != null) {
             tooltip.add(I18n.format("tooltip.mmceaddition.machine_data.machine", machineDisplayName(machineName)));
             tooltip.add(I18n.format("tooltip.mmceaddition.machine_data.count", getCount(stack)));
+        }
+        // 升级记录明细：modifier 名 ×数量
+        java.util.Map<String, Integer> upgrades = getUpgrades(stack);
+        if (!upgrades.isEmpty()) {
+            tooltip.add(I18n.format("tooltip.mmceaddition.machine_data.upgrades"));
+            int shown = 0;
+            for (java.util.Map.Entry<String, Integer> entry : upgrades.entrySet()) {
+                if (shown++ >= 6) {
+                    tooltip.add(I18n.format("tooltip.mmceaddition.machine_data.upgrades_more", upgrades.size() - 6));
+                    break;
+                }
+                tooltip.add("  §7" + entry.getKey() + " §ex" + entry.getValue());
+            }
         }
         tooltip.add(I18n.format("tooltip.mmceaddition.machine_data.usage"));
     }

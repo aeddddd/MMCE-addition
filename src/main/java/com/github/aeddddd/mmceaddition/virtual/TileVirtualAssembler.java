@@ -60,6 +60,10 @@ public class TileVirtualAssembler extends TileEntity {
 
     /**
      * 计算当前缓存槽材料最多可装配的份数。
+     * <p>
+     * 升级方块参与替换式抵扣：每条升级定义占据一个结构位置，
+     * 每份装配最多用 1 个升级方块顶替该位置的基础材料，
+     * 因此原料组的有效可用量 = 基础材料 + 该组内升级方块数量。
      *
      * @param machineName 机器注册名；null 或无材料清单时返回 0
      */
@@ -72,15 +76,25 @@ public class TileVirtualAssembler extends TileEntity {
         if (groups.isEmpty()) {
             return 0;
         }
+        List<MachineMaterialAnalyzer.UpgradeInfo> upgrades = MachineMaterialAnalyzer.upgradesFor(machine);
         // 输出槽剩余空间（int 计数）也是上限之一
         long room = outputRoom(machineName);
         if (room <= 0) {
             return 0;
         }
         long k = Long.MAX_VALUE;
-        for (MachineMaterialAnalyzer.IngredientGroup group : groups) {
-            long available = countAvailable(group);
-            k = Math.min(k, available / group.getCount());
+        for (int i = 0; i < groups.size(); i++) {
+            MachineMaterialAnalyzer.IngredientGroup group = groups.get(i);
+            long base = countAvailable(group);
+            long upgradeAvailable = 0;
+            int replacements = 0;
+            for (MachineMaterialAnalyzer.UpgradeInfo upgrade : upgrades) {
+                if (upgrade.getBaseGroupIndex() == i) {
+                    replacements++;
+                    upgradeAvailable += countAvailableItems(upgrade);
+                }
+            }
+            k = Math.min(k, groupAssembleCount(base, upgradeAvailable, replacements, group.getCount()));
             if (k == 0) {
                 return 0;
             }
@@ -89,7 +103,26 @@ public class TileVirtualAssembler extends TileEntity {
     }
 
     /**
-     * 执行装配：消耗 k 份材料，产出/合并机器数据。
+     * 单个原料组的可装配份数。
+     * 每份需要 count 件物品，其中最多 R 件可由升级方块顶替（每位置每份 1 个）。
+     */
+    private static long groupAssembleCount(long base, long upgradeAvailable, int replacements, int count) {
+        if (replacements == 0 || upgradeAvailable == 0) {
+            return base / count;
+        }
+        if (count <= replacements) {
+            // 该组可被升级全覆盖（极端），不构成限制
+            return Long.MAX_VALUE / count;
+        }
+        long boundary = upgradeAvailable / replacements;
+        if (base / (count - replacements) < boundary) {
+            return base / (count - replacements);
+        }
+        return (base + upgradeAvailable) / count;
+    }
+
+    /**
+     * 执行装配：消耗 k 份材料（升级方块优先替换式顶替并记录），产出/合并机器数据。
      *
      * @return 实际装配份数；0 表示失败
      */
@@ -105,14 +138,29 @@ public class TileVirtualAssembler extends TileEntity {
         if (groups.isEmpty()) {
             return 0;
         }
+        List<MachineMaterialAnalyzer.UpgradeInfo> upgrades = MachineMaterialAnalyzer.upgradesFor(machine);
         int maxK = getAssembleCount(machineName);
         int actual = Math.min(k, maxK);
         if (actual <= 0) {
             return 0;
         }
-        // 消耗材料
-        for (MachineMaterialAnalyzer.IngredientGroup group : groups) {
+
+        // 消耗材料：先按升级定义替换式顶替（每位置每份 1 个），剩余用基础材料
+        java.util.Map<String, Integer> recorded = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < groups.size(); i++) {
+            MachineMaterialAnalyzer.IngredientGroup group = groups.get(i);
             long need = (long) group.getCount() * actual;
+            for (MachineMaterialAnalyzer.UpgradeInfo upgrade : upgrades) {
+                if (upgrade.getBaseGroupIndex() != i || need <= 0) {
+                    continue;
+                }
+                int use = (int) Math.min(actual, countAvailableItems(upgrade));
+                if (use > 0) {
+                    consumeItems(upgrade, use);
+                    recorded.merge(upgrade.getModifierName(), use, Integer::sum);
+                    need -= use;
+                }
+            }
             for (int slot = 0; slot < buffer.getSlots() && need > 0; slot++) {
                 ItemStack stack = buffer.stacks[slot];
                 if (stack.isEmpty() || !group.accepts(stack)) {
@@ -126,13 +174,15 @@ public class TileVirtualAssembler extends TileEntity {
                 need -= take;
             }
         }
-        // 产出/合并机器数据
+
+        // 产出/合并机器数据（数量与升级记录都合并）
         if (output.stack.isEmpty()) {
             output.stack = ItemMachineData.createStack(machineName, actual);
         } else {
             long merged = (long) ItemMachineData.getCount(output.stack) + actual;
             ItemMachineData.setCount(output.stack, (int) Math.min(merged, Integer.MAX_VALUE));
         }
+        ItemMachineData.addUpgrades(output.stack, recorded);
         markDirty();
         return actual;
     }
@@ -159,6 +209,35 @@ public class TileVirtualAssembler extends TileEntity {
             }
         }
         return total;
+    }
+
+    /** 统计缓存槽中某升级定义的可用方块总量。 */
+    private long countAvailableItems(MachineMaterialAnalyzer.UpgradeInfo upgrade) {
+        long total = 0;
+        for (int slot = 0; slot < buffer.getSlots(); slot++) {
+            ItemStack stack = buffer.stacks[slot];
+            if (!stack.isEmpty() && upgrade.accepts(stack)) {
+                total += stack.getCount();
+            }
+        }
+        return total;
+    }
+
+    /** 从缓存槽消耗某升级定义的方块。 */
+    private void consumeItems(MachineMaterialAnalyzer.UpgradeInfo upgrade, int amount) {
+        long need = amount;
+        for (int slot = 0; slot < buffer.getSlots() && need > 0; slot++) {
+            ItemStack stack = buffer.stacks[slot];
+            if (stack.isEmpty() || !upgrade.accepts(stack)) {
+                continue;
+            }
+            int take = (int) Math.min(need, stack.getCount());
+            stack.shrink(take);
+            if (stack.getCount() <= 0) {
+                buffer.stacks[slot] = ItemStack.EMPTY;
+            }
+            need -= take;
+        }
     }
 
     // ==================== Capability ====================
