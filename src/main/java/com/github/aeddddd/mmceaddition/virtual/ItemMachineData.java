@@ -34,6 +34,8 @@ public class ItemMachineData extends Item {
     private static final String TAG_COUNT = "count";
     /** 升级记录：modifier 名 → 数量（装配时缓存槽中的升级方块替换式载入）。 */
     private static final String TAG_UPGRADES = "upgrades";
+    /** 升级并行度快照：modifier 名 → 装配时解析的迁移并行度（免疫 reload 后自动命名漂移）。 */
+    private static final String TAG_UPGRADE_PARALLELISM = "upgradeParallelism";
 
     public ItemMachineData() {
         setTranslationKey(MMCEAddition.MODID + ".machine_data");
@@ -125,6 +127,53 @@ public class ItemMachineData extends Item {
         NBTTagCompound tag = stack.getTagCompound();
         return tag != null && tag.hasKey(TAG_UPGRADES) && !tag.getCompoundTag(TAG_UPGRADES).isEmpty();
     }
+
+    /**
+     * 合并写入升级并行度快照（同名取最大值）。
+     */
+    public static void addUpgradeParallelism(@Nonnull ItemStack stack, @Nonnull java.util.Map<String, Integer> snapshot) {
+        if (snapshot.isEmpty()) {
+            return;
+        }
+        NBTTagCompound tag = stack.getTagCompound();
+        if (tag == null) {
+            tag = new NBTTagCompound();
+            stack.setTagCompound(tag);
+        }
+        NBTTagCompound map = tag.getCompoundTag(TAG_UPGRADE_PARALLELISM);
+        for (java.util.Map.Entry<String, Integer> entry : snapshot.entrySet()) {
+            map.setInteger(entry.getKey(), Math.max(map.getInteger(entry.getKey()), entry.getValue()));
+        }
+        tag.setTag(TAG_UPGRADE_PARALLELISM, map);
+    }
+
+    /**
+     * 读取某升级在装配时快照的并行度；未快照（旧数据）返回 0。
+     */
+    public static int getUpgradeParallelism(@Nonnull ItemStack stack, @Nonnull String modifierName) {
+        NBTTagCompound tag = stack.getTagCompound();
+        if (tag == null || !tag.hasKey(TAG_UPGRADE_PARALLELISM)) {
+            return 0;
+        }
+        return tag.getCompoundTag(TAG_UPGRADE_PARALLELISM).getInteger(modifierName);
+    }
+
+    /**
+     * 读取整份升级并行度快照（modifier 名 → 并行度）；无快照返回空 map。
+     */
+    @Nonnull
+    public static java.util.Map<String, Integer> getUpgradeParallelismMap(@Nonnull ItemStack stack) {
+        java.util.Map<String, Integer> result = new java.util.LinkedHashMap<>();
+        NBTTagCompound tag = stack.getTagCompound();
+        if (tag == null || !tag.hasKey(TAG_UPGRADE_PARALLELISM)) {
+            return result;
+        }
+        NBTTagCompound map = tag.getCompoundTag(TAG_UPGRADE_PARALLELISM);
+        for (String key : map.getKeySet()) {
+            result.put(key, map.getInteger(key));
+        }
+        return result;
+    }
     /**
      * 设置内部存储的机器数量（钳制到 [1, Integer.MAX_VALUE]）。
      */
@@ -150,15 +199,26 @@ public class ItemMachineData extends Item {
 
     /**
      * 取机器的显示名（解析失败时退回注册名原文）。
+     * <p>
+     * 部分 MMCE 分支/版本的 {@code AbstractMachine} 没有 getLocalizedName，
+     * 直接调用会在排序/渲染显示名时抛 NoSuchMethodError 崩服务端，
+     * 这里对链接错误做兜底，缺失时退回注册名原文。
      */
     @Nonnull
     public static String machineDisplayName(@Nullable String machineName) {
         if (machineName == null) {
             return "?";
         }
-        DynamicMachine machine = resolveMachine(machineName);
-        if (machine != null && machine.getLocalizedName() != null && !machine.getLocalizedName().isEmpty()) {
-            return machine.getLocalizedName();
+        try {
+            DynamicMachine machine = resolveMachine(machineName);
+            if (machine != null) {
+                String localized = machine.getLocalizedName();
+                if (localized != null && !localized.isEmpty()) {
+                    return localized;
+                }
+            }
+        } catch (Throwable ignored) {
+            // NoSuchMethodError 等链接错误：当前 MMCE 版本无此 API，退回注册名
         }
         return machineName;
     }

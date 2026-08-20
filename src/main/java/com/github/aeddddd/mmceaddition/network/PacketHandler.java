@@ -20,6 +20,8 @@ public class PacketHandler {
                 PktMEPatternAssemblyScroll.class, id++, Side.SERVER);
         INSTANCE.registerMessage(PktMEPatternAssemblyBufferCounts.Handler.class,
                 PktMEPatternAssemblyBufferCounts.class, id++, Side.CLIENT);
+        INSTANCE.registerMessage(PktMEPatternAssemblyFluidBuffers.Handler.class,
+                PktMEPatternAssemblyFluidBuffers.class, id++, Side.CLIENT);
         INSTANCE.registerMessage(PktVirtualAssemblerSelect.Handler.class,
                 PktVirtualAssemblerSelect.class, id++, Side.SERVER);
         INSTANCE.registerMessage(PktVirtualAssemble.Handler.class,

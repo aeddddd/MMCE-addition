@@ -14,6 +14,8 @@ import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
 import javax.annotation.Nonnull;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * ME 样板总成容器。
@@ -201,6 +203,97 @@ public class ContainerMEPatternAssembly extends Container {
                 }
             }
         }
+
+        // 流体缓冲不参与物品槽同步：按内容签名比对，变化时全量推送流体种类与真实数量
+        if (owner.getWorld() != null && !owner.getWorld().isRemote) {
+            PatternAssemblySlot fluidSlot = owner.getSlots()[selectedSlot];
+            long inSig = fluidSignature(fluidSlot.getInputFluidBuffer());
+            long outSig = fluidSignature(fluidSlot.getOutputFluidBuffer());
+            if (inSig != lastFluidInSig || outSig != lastFluidOutSig) {
+                lastFluidInSig = inSig;
+                lastFluidOutSig = outSig;
+                com.github.aeddddd.mmceaddition.network.PktMEPatternAssemblyFluidBuffers pkt =
+                        buildFluidPacket(fluidSlot);
+                for (IContainerListener listener : listeners) {
+                    if (listener instanceof net.minecraft.entity.player.EntityPlayerMP) {
+                        com.github.aeddddd.mmceaddition.network.PacketHandler.INSTANCE.sendTo(
+                                pkt, (net.minecraft.entity.player.EntityPlayerMP) listener);
+                    }
+                }
+            }
+        }
+    }
+
+    /** 最近一次流体缓冲同步的内容签名（初始值强制首次推送）。 */
+    private long lastFluidInSig = -1;
+    private long lastFluidOutSig = -1;
+
+    /** 客户端缓存：选中槽的流体缓冲（由 PktMEPatternAssemblyFluidBuffers 同步）。 */
+    private final List<FluidBufferEntry> clientFluidInput = new ArrayList<>();
+    private final List<FluidBufferEntry> clientFluidOutput = new ArrayList<>();
+
+    public List<FluidBufferEntry> getClientFluidInput() {
+        return clientFluidInput;
+    }
+
+    public List<FluidBufferEntry> getClientFluidOutput() {
+        return clientFluidOutput;
+    }
+
+    public void setClientFluids(List<FluidBufferEntry> input, List<FluidBufferEntry> output) {
+        clientFluidInput.clear();
+        clientFluidInput.addAll(input);
+        clientFluidOutput.clear();
+        clientFluidOutput.addAll(output);
+    }
+
+    /** 流体缓冲条目：流体 + 真实数量（long，mB）。 */
+    public static class FluidBufferEntry {
+        public final net.minecraftforge.fluids.Fluid fluid;
+        public final long amount;
+
+        public FluidBufferEntry(net.minecraftforge.fluids.Fluid fluid, long amount) {
+            this.fluid = fluid;
+            this.amount = amount;
+        }
+    }
+
+    /** 流体缓冲内容的 FNV 签名，用于变化检测。 */
+    private static long fluidSignature(com.github.aeddddd.mmceaddition.util.LongFluidBuffer buffer) {
+        long sig = 1469598103934665603L;
+        for (java.util.Map.Entry<net.minecraftforge.fluids.Fluid, Long> e : buffer.snapshot().entrySet()) {
+            sig = (sig ^ e.getKey().getName().hashCode()) * 1099511628211L;
+            sig = (sig ^ e.getValue()) * 1099511628211L;
+        }
+        return sig;
+    }
+
+    private static com.github.aeddddd.mmceaddition.network.PktMEPatternAssemblyFluidBuffers buildFluidPacket(
+            PatternAssemblySlot slot) {
+        String[] inNames;
+        long[] inAmounts;
+        String[] outNames;
+        long[] outAmounts;
+        java.util.Map<net.minecraftforge.fluids.Fluid, Long> inMap = slot.getInputFluidBuffer().snapshot();
+        java.util.Map<net.minecraftforge.fluids.Fluid, Long> outMap = slot.getOutputFluidBuffer().snapshot();
+        inNames = new String[inMap.size()];
+        inAmounts = new long[inMap.size()];
+        int i = 0;
+        for (java.util.Map.Entry<net.minecraftforge.fluids.Fluid, Long> e : inMap.entrySet()) {
+            inNames[i] = e.getKey().getName();
+            inAmounts[i] = e.getValue();
+            i++;
+        }
+        outNames = new String[outMap.size()];
+        outAmounts = new long[outMap.size()];
+        i = 0;
+        for (java.util.Map.Entry<net.minecraftforge.fluids.Fluid, Long> e : outMap.entrySet()) {
+            outNames[i] = e.getKey().getName();
+            outAmounts[i] = e.getValue();
+            i++;
+        }
+        return new com.github.aeddddd.mmceaddition.network.PktMEPatternAssemblyFluidBuffers(
+                inNames, inAmounts, outNames, outAmounts);
     }
 
     /** 服务端：按当前选中槽输入/输出缓冲的变体数计算最大滚动偏移。 */
@@ -211,6 +304,9 @@ public class ContainerMEPatternAssembly extends Container {
         PatternAssemblySlot slot = owner.getSlots()[selectedSlot];
         int max = Math.max(slot.getInputItemBuffer().snapshot().size(),
                 slot.getOutputItemBuffer().snapshot().size());
+        // 流体视图的条目数同样参与滚动上限
+        max = Math.max(max, Math.max(slot.getInputFluidBuffer().snapshot().size(),
+                slot.getOutputFluidBuffer().snapshot().size()));
         return Math.max(0, max - SelectedSlotBufferHandler.SLOTS_PER_BUFFER);
     }
 

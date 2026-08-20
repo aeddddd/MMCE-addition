@@ -32,6 +32,8 @@ public class BlockInformationMixin {
     private static final String ASYNC_ITEM_OUTPUT_BUS = "mmceaddition:me_async_item_output_bus";
     private static final String ASYNC_FLUID_OUTPUT_BUS = "mmceaddition:me_async_fluid_output_hatch";
     private static final String ME_PATTERN_ASSEMBLY = "mmceaddition:me_pattern_assembly";
+    private static final String ME_OUTPUT_ASSEMBLY = "mmceaddition:me_output_assembly";
+    private static final String INPUT_ASSEMBLY = "mmceaddition:input_assembly";
     private static final String VIRTUAL_PARALLEL_HATCH = "mmceaddition:virtual_parallel_hatch";
 
     /**
@@ -109,6 +111,21 @@ public class BlockInformationMixin {
         else if (MMCEAdditionConfig.enableMEPatternAssemblyCompat
                 && ME_PATTERN_ASSEMBLY.equals(actualRegName)
                 && (expectItemBus || expectFluidHatch || expectPatternProvider || expectEnergyInputHatch)) {
+            cir.setReturnValue(true);
+        }
+        // ME 输出总成仓：可替换任意物品/流体/能源仓室位置（含输入与输出）。
+        // 注意：该方块不提供物品/流体输入功能，替换机器唯一的输入仓会导致断料（Tooltip 已警示）。
+        else if (MMCEAdditionConfig.enableMEOutputAssemblyCompat
+                && ME_OUTPUT_ASSEMBLY.equals(actualRegName)
+                && (expectItemBus || expectFluidHatch
+                || expectEnergyInputHatch || expectEnergyOutputHatch)) {
+            cir.setReturnValue(true);
+        }
+        // 输入总成仓：可替换任意物品/流体仓室位置（含输入与输出）。
+        // 注意：该方块只提供输入功能，放在输出位置时结构可成型但配方找不到输出组件。
+        else if (MMCEAdditionConfig.enableInputAssemblyCompat
+                && INPUT_ASSEMBLY.equals(actualRegName)
+                && (expectItemBus || expectFluidHatch)) {
             cir.setReturnValue(true);
         }
         // 虚拟并行仓：可替换全部仓室位置（物品/流体/能源输入输出、ME Pattern Provider）。

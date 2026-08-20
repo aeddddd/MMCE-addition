@@ -45,6 +45,8 @@ public class ClientEventHandler {
         registerItemModel(Item.getItemFromBlock(RegistryHandler.ME_ASYNC_ITEM_OUTPUT_BUS));
         registerItemModel(Item.getItemFromBlock(RegistryHandler.ME_ASYNC_FLUID_OUTPUT_HATCH));
         registerItemModel(Item.getItemFromBlock(RegistryHandler.ME_PATTERN_ASSEMBLY));
+        registerItemModel(Item.getItemFromBlock(RegistryHandler.ME_OUTPUT_ASSEMBLY));
+        registerItemModel(Item.getItemFromBlock(RegistryHandler.INPUT_ASSEMBLY));
         registerItemModel(Item.getItemFromBlock(RegistryHandler.VIRTUAL_ASSEMBLER));
         registerItemModel(Item.getItemFromBlock(RegistryHandler.VIRTUAL_PARALLEL_HATCH));
         registerItemModel(RegistryHandler.MACHINE_DATA);
@@ -94,6 +96,10 @@ public class ClientEventHandler {
             addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_async_fluid_output_hatch");
         } else if (item == Item.getItemFromBlock(RegistryHandler.ME_PATTERN_ASSEMBLY)) {
             addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_pattern_assembly");
+        } else if (item == Item.getItemFromBlock(RegistryHandler.ME_OUTPUT_ASSEMBLY)) {
+            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_output_assembly");
+        } else if (item == Item.getItemFromBlock(RegistryHandler.INPUT_ASSEMBLY)) {
+            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.input_assembly");
         } else if (item == Item.getItemFromBlock(RegistryHandler.VIRTUAL_ASSEMBLER)) {
             addMultiLineTooltip(tooltip, "tooltip.mmceaddition.virtual_assembler");
         } else if (item == Item.getItemFromBlock(RegistryHandler.VIRTUAL_PARALLEL_HATCH)) {

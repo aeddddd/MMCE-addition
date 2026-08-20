@@ -134,6 +134,14 @@ public final class FakeParallelMigrator {
     }
 
     /**
+     * 读取该机器的完整授权表（诊断用）；未扫描过时返回空列表。
+     */
+    public static List<Grant> grantsFor(DynamicMachine machine) {
+        List<Grant> grants = GRANTS.get(machine.getRegistryName().toString());
+        return grants == null ? Collections.<Grant>emptyList() : grants;
+    }
+
+    /**
      * 按当前结构中实际匹配的元件，计算控制器此刻的有效并行度。
      * <p>
      * 只读取控制器内存中的 foundModifiers（ConcurrentHashMap），

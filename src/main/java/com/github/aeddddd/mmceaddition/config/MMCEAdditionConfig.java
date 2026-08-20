@@ -56,6 +56,28 @@ public class MMCEAdditionConfig {
     public static boolean enableMEPatternAssemblyCompat = true;
 
     /**
+     * 是否启用 ME 输出总成仓的结构位置兼容。
+     * <p>
+     * 开启后，ME 输出总成仓可以被 MMCE 机器结构识别为任意物品/流体/能源仓室位置
+     * （含输入与输出），从而无需修改机器 JSON 就可以替换这些结构位置。
+     */
+    @Config.Name("enable_me_output_assembly_compat")
+    @Config.Comment("允许 ME 输出总成仓替换原 MMCE 各类物品/流体/能源仓室（含输入与输出）的结构位置（无需修改机器 JSON）")
+    @Config.LangKey("config.mmceaddition.enable_me_output_assembly_compat")
+    public static boolean enableMEOutputAssemblyCompat = true;
+
+    /**
+     * 是否启用输入总成仓的结构位置兼容。
+     * <p>
+     * 开启后，输入总成仓可以被 MMCE 机器结构识别为任意物品/流体仓室位置
+     * （含输入与输出），从而无需修改机器 JSON 就可以替换这些结构位置。
+     */
+    @Config.Name("enable_input_assembly_compat")
+    @Config.Comment("允许输入总成仓替换原 MMCE 各类物品/流体仓室（含输入与输出）的结构位置（无需修改机器 JSON）")
+    @Config.LangKey("config.mmceaddition.enable_input_assembly_compat")
+    public static boolean enableInputAssemblyCompat = true;
+
+    /**
      * 异步输出注入间隔，单位：tick。
      * <p>
      * 缓冲区内的产出不会立即进入 ME 网络，而是每隔这么多 tick 批量注入一次。

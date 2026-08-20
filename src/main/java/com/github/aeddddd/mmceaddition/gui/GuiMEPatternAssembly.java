@@ -64,8 +64,17 @@ public class GuiMEPatternAssembly extends GuiContainer {
     private static final int BUFFER_START = ContainerMEPatternAssembly.PATTERNS + ContainerMEPatternAssembly.CATALYST_SLOTS;
     private static final int BUFFER_END = ContainerMEPatternAssembly.PLAYER_START;
 
+    /** 缓冲面板右上角"物品/流体"视图切换按钮的区域（相对 GUI 左上角）。 */
+    private static final int MODE_BTN_X = 228;
+    private static final int MODE_BTN_Y = 9;
+    private static final int MODE_BTN_W = 22;
+    private static final int MODE_BTN_H = 11;
+
     private final TileMEPatternAssembly assembly;
     private final ContainerMEPatternAssembly container;
+
+    /** 缓冲面板视图模式：false=物品缓冲，true=流体缓冲（纯客户端状态）。 */
+    private boolean fluidMode = false;
 
     public GuiMEPatternAssembly(TileMEPatternAssembly assembly, ContainerMEPatternAssembly container) {
         super(container);
@@ -126,7 +135,24 @@ public class GuiMEPatternAssembly extends GuiContainer {
         int selX = 8 + (selected % 9) * 18;
         int selY = 28 + (selected / 9) * 18;
         drawRect(selX, selY, selX + 16, selY + 16, COLOR_SELECTED);
+
+        // 缓冲面板"物品/流体"视图切换按钮
+        String modeText = I18n.format(fluidMode
+                ? "gui.mepatternassembly.mode.fluid" : "gui.mepatternassembly.mode.item");
+        boolean hovered = mouseX >= guiLeft + MODE_BTN_X && mouseX < guiLeft + MODE_BTN_X + MODE_BTN_W
+                && mouseY >= guiTop + MODE_BTN_Y && mouseY < guiTop + MODE_BTN_Y + MODE_BTN_H;
+        drawRect(MODE_BTN_X - 1, MODE_BTN_Y - 1, MODE_BTN_X + MODE_BTN_W + 1,
+                MODE_BTN_Y + MODE_BTN_H + 1, hovered ? 0xFF6A6A6A : 0xFF2E2E2E);
+        fontRenderer.drawString(modeText,
+                MODE_BTN_X + (MODE_BTN_W - fontRenderer.getStringWidth(modeText)) / 2,
+                MODE_BTN_Y + 2, hovered ? 0xFFFFFFA0 : 0xFFC6C6C6);
     }
+
+    /**
+     * 流体视图下物品缓冲槽的遮盖：GuiContainer.drawSlot 是 private 无法覆写，
+     * 改为在物品绘制之后重绘槽位单元格（18x18 不透明槽框）盖住物品图标，
+     * 再在其上绘制流体图标。
+     */
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
@@ -160,9 +186,64 @@ public class GuiMEPatternAssembly extends GuiContainer {
             }
         }
 
-        drawBufferCountOverlays();
+        if (fluidMode) {
+            drawFluidBuffers();
+        } else {
+            drawBufferCountOverlays();
+        }
         drawBufferScrollbar();
         renderHoveredToolTip(mouseX, mouseY);
+    }
+
+    /** 流体视图：先重绘槽框盖住物品图标，再在格内绘制流体图标与真实数量。 */
+    private void drawFluidBuffers() {
+        int offset = container.getBufferScrollOffset();
+        int perBuffer = SelectedSlotBufferHandler.SLOTS_PER_BUFFER;
+
+        // 重绘全部缓冲格的槽位单元格，遮盖已绘制的物品图标（drawSlot 为 private 无法覆写）
+        mc.getTextureManager().bindTexture(TEXTURE);
+        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+        for (int i = BUFFER_START; i < BUFFER_END; i++) {
+            Slot slot = container.inventorySlots.get(i);
+            drawTexturedModalRect(guiLeft + slot.xPos - 1, guiTop + slot.yPos - 1,
+                    SLOT_U, SLOT_V, SLOT_SIZE, SLOT_SIZE);
+        }
+
+        for (int i = 0; i < perBuffer; i++) {
+            drawFluidInCell(BUFFER_START + i, container.getClientFluidInput(), offset + i);
+            drawFluidInCell(BUFFER_START + perBuffer + i, container.getClientFluidOutput(), offset + i);
+        }
+    }
+
+    private void drawFluidInCell(int slotIndex, List<ContainerMEPatternAssembly.FluidBufferEntry> fluids, int fluidIndex) {
+        if (fluidIndex < 0 || fluidIndex >= fluids.size()) {
+            return;
+        }
+        ContainerMEPatternAssembly.FluidBufferEntry entry = fluids.get(fluidIndex);
+        Slot slot = container.inventorySlots.get(slotIndex);
+        int x = guiLeft + slot.xPos;
+        int y = guiTop + slot.yPos;
+
+        net.minecraft.client.renderer.texture.TextureAtlasSprite sprite =
+                mc.getTextureMapBlocks().getAtlasSprite(entry.fluid.getStill().toString());
+        mc.getTextureManager().bindTexture(net.minecraft.client.renderer.texture.TextureMap.LOCATION_BLOCKS_TEXTURE);
+        int color = entry.fluid.getColor();
+        GlStateManager.color(((color >> 16) & 0xFF) / 255.0F, ((color >> 8) & 0xFF) / 255.0F,
+                (color & 0xFF) / 255.0F, 1.0F);
+        drawTexturedModalRect(x, y, sprite, 16, 16);
+        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+
+        // 数量角标（与物品缓冲同一风格，0.5 倍缩放右下角）
+        String text = formatCount(entry.amount);
+        GlStateManager.pushMatrix();
+        GlStateManager.translate(x, y, 300.0F);
+        GlStateManager.scale(0.5F, 0.5F, 1.0F);
+        GlStateManager.disableLighting();
+        GlStateManager.disableDepth();
+        fontRenderer.drawStringWithShadow(text, 32 - fontRenderer.getStringWidth(text), 24, 0xFFFFFF);
+        GlStateManager.enableDepth();
+        GlStateManager.enableLighting();
+        GlStateManager.popMatrix();
     }
 
     /** 缓冲面板右侧的滚动指示条：仅在内容超出一页时显示。 */
@@ -250,6 +331,15 @@ public class GuiMEPatternAssembly extends GuiContainer {
     @Override
     protected void renderHoveredToolTip(int mouseX, int mouseY) {
         Slot hovered = getSlotUnderMouse();
+        // 流体视图：缓冲格显示流体 tooltip，物品缓冲槽的 tooltip 一律抑制
+        if (fluidMode) {
+            if (hovered != null && hovered.slotNumber >= BUFFER_START && hovered.slotNumber < BUFFER_END) {
+                renderFluidTooltip(hovered, mouseX, mouseY);
+                return;
+            }
+            super.renderHoveredToolTip(mouseX, mouseY);
+            return;
+        }
         if (hovered instanceof ContainerMEPatternAssembly.BufferSlot && hovered.getHasStack()) {
             ItemStack stack = hovered.getStack();
             long trueCount = container.getBufferHandler().getTrueCount(
@@ -266,8 +356,42 @@ public class GuiMEPatternAssembly extends GuiContainer {
         super.renderHoveredToolTip(mouseX, mouseY);
     }
 
+    /** 流体视图下缓冲格的 tooltip：流体本地化名称 + 精确数量（mB）。 */
+    private void renderFluidTooltip(Slot hovered, int mouseX, int mouseY) {
+        int perBuffer = SelectedSlotBufferHandler.SLOTS_PER_BUFFER;
+        int idx = hovered.slotNumber - BUFFER_START;
+        List<ContainerMEPatternAssembly.FluidBufferEntry> fluids = idx < perBuffer
+                ? container.getClientFluidInput() : container.getClientFluidOutput();
+        int fluidIndex = (idx < perBuffer ? idx : idx - perBuffer) + container.getBufferScrollOffset();
+        if (fluidIndex < 0 || fluidIndex >= fluids.size()) {
+            return;
+        }
+        ContainerMEPatternAssembly.FluidBufferEntry entry = fluids.get(fluidIndex);
+        List<String> tooltip = new java.util.ArrayList<>();
+        tooltip.add(entry.fluid.getLocalizedName(new net.minecraftforge.fluids.FluidStack(entry.fluid, 1)));
+        tooltip.add(net.minecraft.util.text.TextFormatting.GRAY
+                + I18n.format("gui.mepatternassembly.fluidcount", entry.amount));
+        drawHoveringText(tooltip, mouseX, mouseY);
+    }
+
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
+        // "物品/流体"视图切换按钮（左键）
+        if (mouseButton == 0
+                && mouseX >= guiLeft + MODE_BTN_X && mouseX < guiLeft + MODE_BTN_X + MODE_BTN_W
+                && mouseY >= guiTop + MODE_BTN_Y && mouseY < guiTop + MODE_BTN_Y + MODE_BTN_H) {
+            fluidMode = !fluidMode;
+            return;
+        }
+
+        // 流体视图下吞掉右侧缓冲面板上的点击：
+        // 面板格子下仍是物品缓冲槽，直接放行会对不可见的物品执行取出操作。
+        if (fluidMode
+                && mouseX >= guiLeft + 182 && mouseX < guiLeft + 253
+                && mouseY >= guiTop + 8 && mouseY < guiTop + GUI_HEIGHT - BORDER_HEIGHT) {
+            return;
+        }
+
         super.mouseClicked(mouseX, mouseY, mouseButton);
 
         if (mouseButton == 2) { // 鼠标中键：切换右侧面板/催化剂显示的目标样板槽

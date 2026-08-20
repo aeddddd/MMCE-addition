@@ -183,6 +183,15 @@ public class TileVirtualAssembler extends TileEntity {
             ItemMachineData.setCount(output.stack, (int) Math.min(merged, Integer.MAX_VALUE));
         }
         ItemMachineData.addUpgrades(output.stack, recorded);
+        // 并行度快照：装配时解析一次写入 NBT，免疫 /mm reload 后自动命名漂移
+        if (!recorded.isEmpty()) {
+            java.util.Map<String, Integer> snapshot = new java.util.LinkedHashMap<>();
+            for (String modifierName : recorded.keySet()) {
+                snapshot.put(modifierName,
+                        com.github.aeddddd.mmceaddition.parallel.FakeParallelMigrator.parallelismFor(machine, modifierName));
+            }
+            ItemMachineData.addUpgradeParallelism(output.stack, snapshot);
+        }
         markDirty();
         return actual;
     }

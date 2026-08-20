@@ -60,6 +60,10 @@ public class GuiVirtualAssembler extends GuiContainer {
     private int machineScroll = 0;
     private int materialScroll = 0;
 
+    /** 上次关闭 GUI 时的搜索内容与选中机器（客户端静态记忆，重开时恢复）。 */
+    private static String lastSearch = "";
+    private static String lastSelectedMachine = null;
+
     public GuiVirtualAssembler(ContainerVirtualAssembler container) {
         super(container);
         this.container = container;
@@ -73,6 +77,7 @@ public class GuiVirtualAssembler extends GuiContainer {
         searchField = new GuiTextField(0, fontRenderer, guiLeft + LIST_X, guiTop + 16, LIST_W, 11);
         searchField.setCanLoseFocus(true);
         searchField.setFocused(false);
+        searchField.setText(lastSearch);
         assembleButton = new GuiButton(0, guiLeft + 182, guiTop + 104, 40, 16,
                 I18n.format("gui.virtualassembler.assemble"));
         buttonList.add(assembleButton);
@@ -91,19 +96,45 @@ public class GuiVirtualAssembler extends GuiContainer {
         allMachines.sort((a, b) -> a.getRegistryName().toString().compareTo(b.getRegistryName().toString()));
         applyFilter();
 
-        // 打开时若无选中机器，自动选中列表第一台（本地设置 + 发包服务端）
+        // 打开时若无选中机器：优先恢复上次选中的机器，否则自动选中列表第一台
         if (container.getSelectedMachine() == null && !filteredMachines.isEmpty()) {
-            selectMachine(filteredMachines.get(0));
+            DynamicMachine restore = null;
+            if (lastSelectedMachine != null) {
+                for (DynamicMachine machine : filteredMachines) {
+                    if (machine.getRegistryName().toString().equals(lastSelectedMachine)) {
+                        restore = machine;
+                        break;
+                    }
+                }
+            }
+            selectMachine(restore != null ? restore : filteredMachines.get(0));
         }
+    }
+
+    /**
+     * 安全取机器显示名：部分 MMCE 分支/版本移除了 getLocalizedName，
+     * 直接调用会抛 NoSuchMethodError，这里兜底退回注册名路径。
+     */
+    private static String safeDisplayName(DynamicMachine machine) {
+        try {
+            String localized = machine.getLocalizedName();
+            if (localized != null && !localized.isEmpty()) {
+                return localized;
+            }
+        } catch (Throwable ignored) {
+            // 链接错误：当前 MMCE 版本无此 API
+        }
+        return machine.getRegistryName().getPath();
     }
 
     private void applyFilter() {
         String query = searchField == null ? "" : searchField.getText().trim().toLowerCase();
+        lastSearch = searchField == null ? lastSearch : searchField.getText();
         filteredMachines = new ArrayList<>();
         for (DynamicMachine machine : allMachines) {
             if (query.isEmpty()
                     || machine.getRegistryName().toString().toLowerCase().contains(query)
-                    || (machine.getLocalizedName() != null && machine.getLocalizedName().toLowerCase().contains(query))) {
+                    || safeDisplayName(machine).toLowerCase().contains(query)) {
                 filteredMachines.add(machine);
             }
         }
@@ -113,6 +144,7 @@ public class GuiVirtualAssembler extends GuiContainer {
     private void selectMachine(DynamicMachine machine) {
         String name = machine.getRegistryName().toString();
         container.setSelectedMachine(name);
+        lastSelectedMachine = name;
         PacketHandler.INSTANCE.sendToServer(
                 new PktVirtualAssemblerSelect(container.getOwner().getPos(), name));
         materialScroll = 0;
@@ -188,8 +220,7 @@ public class GuiVirtualAssembler extends GuiContainer {
             if (selected) {
                 drawRect(LIST_X, rowY, LIST_X + LIST_W, rowY + ROW_H, 0xFF6A6AC8);
             }
-            String name = machine.getLocalizedName() != null && !machine.getLocalizedName().isEmpty()
-                    ? machine.getLocalizedName() : machine.getRegistryName().getPath();
+            String name = safeDisplayName(machine);
             name = fontRenderer.trimStringToWidth(name, LIST_W - 4);
             fontRenderer.drawString(name, LIST_X + 2, rowY + 1, selected ? 0xFFFFFF : 0x1B1B2E);
         }

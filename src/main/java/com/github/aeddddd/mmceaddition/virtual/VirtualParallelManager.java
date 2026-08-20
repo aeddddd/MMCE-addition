@@ -92,23 +92,29 @@ public final class VirtualParallelManager {
         int cap = Math.max(1, MMCEAdditionConfig.virtualParallelCap);
         try {
             long sum = 0;
-            Map<TileEntity, ProcessingComponent<?>> components = controller.getFoundComponents();
+            // 版本适配：2.2.2 的 getFoundComponents 是 Map<TileEntity, ProcessingComponent>，
+            // 2.3.x 变为按组分桶的 Map<Long, Map<TileEntity, ProcessingComponent>>。
+            // 统一按通配迭代，遇到嵌套 Map 就下钻一层。
+            Map<?, ?> components = controller.getFoundComponents();
             if (components == null) {
                 return 0;
             }
-            for (TileEntity tile : components.keySet()) {
-                if (!(tile instanceof TileVirtualParallelHatch)) {
-                    continue;
-                }
-                ItemStack data = ((TileVirtualParallelHatch) tile).getDataStack();
-                if (data.isEmpty()) {
-                    continue;
-                }
-                if (machineName.equals(ItemMachineData.getMachineName(data))) {
-                    sum += effectiveParallelism(machine, data);
-                    if (sum >= cap) {
-                        return cap;
+            for (Map.Entry<?, ?> entry : components.entrySet()) {
+                Object key = entry.getKey();
+                if (key instanceof TileEntity) {
+                    sum += matchParallelism((TileEntity) key, machineName, machine);
+                } else if (entry.getValue() instanceof Map) {
+                    for (Object tile : ((Map<?, ?>) entry.getValue()).keySet()) {
+                        if (tile instanceof TileEntity) {
+                            sum += matchParallelism((TileEntity) tile, machineName, machine);
+                        }
+                        if (sum >= cap) {
+                            return cap;
+                        }
                     }
+                }
+                if (sum >= cap) {
+                    return cap;
                 }
             }
             return (int) Math.min(sum, cap);
@@ -118,9 +124,23 @@ public final class VirtualParallelManager {
         }
     }
 
+    /** 单个 Tile 的并行贡献：是虚拟并行仓且数据匹配时返回有效并行度，否则 0。 */
+    private static long matchParallelism(TileEntity tile, String machineName, DynamicMachine machine) {
+        if (!(tile instanceof TileVirtualParallelHatch)) {
+            return 0;
+        }
+        ItemStack data = ((TileVirtualParallelHatch) tile).getDataStack();
+        if (data.isEmpty() || !machineName.equals(ItemMachineData.getMachineName(data))) {
+            return 0;
+        }
+        return effectiveParallelism(machine, data);
+    }
+
     /**
      * 单份机器数据的有效并行贡献：
-     * 记录了升级时 N = Σ(升级数量 × 该升级的迁移并行度)（替代机器数量）；
+     * 记录了升级时 N = Σ(升级数量 × 升级并行度)（替代机器数量）；
+     * 并行度优先取装配时的快照（免疫 /mm reload 后自动命名漂移），
+     * 无快照的旧数据回退到按名称实时查询迁移授权表；
      * 无升级记录时 N = 内部存储的机器数量（向后兼容）。
      * 非并行类升级对 N 贡献 0，其效果由 {@code DynamicMachineMixin} 注入配方上下文真实生效。
      */
@@ -131,8 +151,12 @@ public final class VirtualParallelManager {
         }
         long sum = 0;
         for (java.util.Map.Entry<String, Integer> entry : upgrades.entrySet()) {
-            sum += (long) entry.getValue()
-                    * com.github.aeddddd.mmceaddition.parallel.FakeParallelMigrator.parallelismFor(machine, entry.getKey());
+            int parallelism = ItemMachineData.getUpgradeParallelism(data, entry.getKey());
+            if (parallelism <= 0) {
+                parallelism = com.github.aeddddd.mmceaddition.parallel.FakeParallelMigrator
+                        .parallelismFor(machine, entry.getKey());
+            }
+            sum += (long) entry.getValue() * parallelism;
         }
         return sum;
     }

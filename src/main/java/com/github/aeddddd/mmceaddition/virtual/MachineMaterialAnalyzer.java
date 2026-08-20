@@ -65,13 +65,7 @@ public final class MachineMaterialAnalyzer {
         }
 
         public boolean accepts(@Nonnull ItemStack stack) {
-            ItemVariant variant = new ItemVariant(stack);
-            for (ItemStack candidate : candidates) {
-                if (new ItemVariant(candidate).equals(variant)) {
-                    return true;
-                }
-            }
-            return false;
+            return candidatesAccept(candidates, stack);
         }
     }
 
@@ -112,14 +106,36 @@ public final class MachineMaterialAnalyzer {
         }
 
         public boolean accepts(@Nonnull ItemStack stack) {
-            ItemVariant variant = new ItemVariant(stack);
-            for (ItemStack candidate : candidates) {
-                if (new ItemVariant(candidate).equals(variant)) {
-                    return true;
-                }
-            }
-            return false;
+            return candidatesAccept(candidates, stack);
         }
+    }
+
+    /**
+     * 候选匹配（逐级放宽）：
+     * <ol>
+     *   <li>物品+meta+NBT 精确匹配</li>
+     *   <li>物品+meta 匹配（忽略 NBT，结构候选不含 NBT，玩家物品可能附带）</li>
+     *   <li>仅物品匹配（忽略 meta 与 NBT，兼容 damageDropped 与物品形态 meta 不一致的方块）</li>
+     * </ol>
+     */
+    private static boolean candidatesAccept(@Nonnull List<ItemStack> candidates, @Nonnull ItemStack stack) {
+        ItemVariant variant = new ItemVariant(stack);
+        for (ItemStack candidate : candidates) {
+            if (new ItemVariant(candidate).equals(variant)) {
+                return true;
+            }
+        }
+        for (ItemStack candidate : candidates) {
+            if (candidate.getItem() == stack.getItem() && candidate.getMetadata() == stack.getMetadata()) {
+                return true;
+            }
+        }
+        for (ItemStack candidate : candidates) {
+            if (candidate.getItem() == stack.getItem()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 机器对象身份 → 材料清单缓存。 */
@@ -337,6 +353,10 @@ public final class MachineMaterialAnalyzer {
         try {
             meta = block.damageDropped(state);
         } catch (Exception e) {
+            meta = 0;
+        }
+        // 无子类型物品的 meta 只承载朝向等状态信息（物品形态恒为 meta 0），归一化以匹配玩家持有的物品
+        if (!item.getHasSubtypes()) {
             meta = 0;
         }
         return new ItemStack(item, 1, meta);

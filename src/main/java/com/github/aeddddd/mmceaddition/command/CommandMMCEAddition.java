@@ -3,8 +3,11 @@ package com.github.aeddddd.mmceaddition.command;
 import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.compat.NetworkEnergyCompat;
+import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
+import com.github.aeddddd.mmceaddition.parallel.FakeParallelMigrator;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
 import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
+import com.github.aeddddd.mmceaddition.virtual.VirtualParallelManager;
 import github.kasuminova.mmce.common.tile.MEItemOutputBus;
 import hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent;
 import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
@@ -31,6 +34,7 @@ import net.minecraft.world.gen.ChunkProviderServer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -167,10 +171,30 @@ public class CommandMMCEAddition extends CommandBase {
         sender.sendMessage(new TextComponentString("匹配机器: "
                 + (machine == null ? "§c无" : String.valueOf(machine.getRegistryName()))));
 
-        Map<TileEntity, ProcessingComponent<?>> components = ctrl.getFoundComponents();
-        sender.sendMessage(new TextComponentString("foundComponents 数量: " + components.size()));
+        // 版本适配：2.2.2 为 Map<TileEntity, ProcessingComponent>，
+        // 2.3.x 为按组分桶的 Map<Long, Map<TileEntity, ProcessingComponent>>，统一扁平化
+        Map<?, ?> rawComponents = ctrl.getFoundComponents();
+        List<Map.Entry<TileEntity, ProcessingComponent<?>>> flat = new ArrayList<>();
+        for (Map.Entry<?, ?> entry : rawComponents.entrySet()) {
+            if (entry.getKey() instanceof TileEntity && entry.getValue() instanceof ProcessingComponent) {
+                @SuppressWarnings("unchecked")
+                Map.Entry<TileEntity, ProcessingComponent<?>> e =
+                        (Map.Entry<TileEntity, ProcessingComponent<?>>) (Map.Entry<?, ?>) entry;
+                flat.add(e);
+            } else if (entry.getValue() instanceof Map) {
+                for (Map.Entry<?, ?> inner : ((Map<?, ?>) entry.getValue()).entrySet()) {
+                    if (inner.getKey() instanceof TileEntity && inner.getValue() instanceof ProcessingComponent) {
+                        @SuppressWarnings("unchecked")
+                        Map.Entry<TileEntity, ProcessingComponent<?>> e =
+                                (Map.Entry<TileEntity, ProcessingComponent<?>>) (Map.Entry<?, ?>) inner;
+                        flat.add(e);
+                    }
+                }
+            }
+        }
+        sender.sendMessage(new TextComponentString("foundComponents 数量: " + flat.size()));
         int validEnergyInput = 0;
-        for (Map.Entry<TileEntity, ProcessingComponent<?>> entry : components.entrySet()) {
+        for (Map.Entry<TileEntity, ProcessingComponent<?>> entry : flat) {
             TileEntity componentTe = entry.getKey();
             ProcessingComponent<?> pc = entry.getValue();
             MachineComponent<?> component = pc.component();
@@ -198,6 +222,24 @@ public class CommandMMCEAddition extends CommandBase {
         sender.sendMessage(new TextComponentString(validEnergyInput > 0
                 ? "§a有效能源输入组件: " + validEnergyInput
                 : "§c未找到有效能源输入组件（RequirementEnergy.isValidComponent 全部不通过）"));
+
+        // 伪并行授权表 + 虚拟并行诊断：确认迁移是否产出授权、虚拟乘区读到多少
+        if (machine != null) {
+            List<FakeParallelMigrator.Grant> grants = FakeParallelMigrator.grantsFor(machine);
+            if (grants.isEmpty()) {
+                sender.sendMessage(new TextComponentString("§7伪并行授权表: 空（该机器未检测到伪并行组或未迁移）"));
+            } else {
+                StringBuilder sb = new StringBuilder("§a伪并行授权表:");
+                for (FakeParallelMigrator.Grant grant : grants) {
+                    sb.append(" ").append(grant.modifierName).append("=x").append(grant.parallelism).append(',');
+                }
+                sb.setLength(sb.length() - 1);
+                sender.sendMessage(new TextComponentString(sb.toString()));
+            }
+            sender.sendMessage(new TextComponentString("§7虚拟并行加数 N = "
+                    + VirtualParallelManager.computeVirtualFactor(ctrl)
+                    + "（最终并行 = 其他并行 x(1+N)，上限 " + MMCEAdditionConfig.virtualParallelCap + "）"));
+        }
     }
 
     private void inspectPatternAssembly(ICommandSender sender, TileMEPatternAssembly assembly) {

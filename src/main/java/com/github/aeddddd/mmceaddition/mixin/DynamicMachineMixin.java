@@ -52,37 +52,53 @@ public abstract class DynamicMachineMixin {
             return;
         }
         try {
-            Map<TileEntity, ProcessingComponent<?>> components = controller.getFoundComponents();
+            // 版本适配：2.2.2 的 getFoundComponents 是 Map<TileEntity, ProcessingComponent>，
+            // 2.3.x 变为按组分桶的 Map<Long, Map<TileEntity, ProcessingComponent>>。
+            // 统一按通配迭代，遇到嵌套 Map 就下钻一层。
+            Map<?, ?> components = controller.getFoundComponents();
             if (components == null) {
                 return;
             }
             String machineName = machine.getRegistryName().toString();
-            for (TileEntity tile : components.keySet()) {
-                if (!(tile instanceof TileVirtualParallelHatch)) {
-                    continue;
-                }
-                ItemStack data = ((TileVirtualParallelHatch) tile).getDataStack();
-                if (data.isEmpty() || !machineName.equals(ItemMachineData.getMachineName(data))) {
-                    continue;
-                }
-                Map<String, Integer> upgrades = ItemMachineData.getUpgrades(data);
-                if (upgrades.isEmpty()) {
-                    continue;
-                }
-                Map<String, List<RecipeModifier>> index = modifierIndex(machine);
-                for (Map.Entry<String, Integer> entry : upgrades.entrySet()) {
-                    List<RecipeModifier> modifiers = index.get(entry.getKey());
-                    if (modifiers == null || modifiers.isEmpty()) {
-                        continue;
-                    }
-                    // 每个升级应用一次，与真实结构逐个安装元件的语义一致
-                    for (int i = 0; i < entry.getValue(); i++) {
-                        context.addModifier(modifiers);
+            for (Map.Entry<?, ?> entry : components.entrySet()) {
+                if (entry.getKey() instanceof TileEntity) {
+                    mmceaddition$injectForTile(machine, machineName, context, (TileEntity) entry.getKey());
+                } else if (entry.getValue() instanceof Map) {
+                    for (Object tile : ((Map<?, ?>) entry.getValue()).keySet()) {
+                        if (tile instanceof TileEntity) {
+                            mmceaddition$injectForTile(machine, machineName, context, (TileEntity) tile);
+                        }
                     }
                 }
             }
         } catch (Exception ignored) {
             // 异步配方搜索线程与主线程并发读写的极端情况：放弃本次注入，不影响主流程
+        }
+    }
+
+    private void mmceaddition$injectForTile(DynamicMachine machine, String machineName,
+                                            RecipeCraftingContext context, TileEntity tile) {
+        if (!(tile instanceof TileVirtualParallelHatch)) {
+            return;
+        }
+        ItemStack data = ((TileVirtualParallelHatch) tile).getDataStack();
+        if (data.isEmpty() || !machineName.equals(ItemMachineData.getMachineName(data))) {
+            return;
+        }
+        Map<String, Integer> upgrades = ItemMachineData.getUpgrades(data);
+        if (upgrades.isEmpty()) {
+            return;
+        }
+        Map<String, List<RecipeModifier>> index = modifierIndex(machine);
+        for (Map.Entry<String, Integer> entry : upgrades.entrySet()) {
+            List<RecipeModifier> modifiers = index.get(entry.getKey());
+            if (modifiers == null || modifiers.isEmpty()) {
+                continue;
+            }
+            // 每个升级应用一次，与真实结构逐个安装元件的语义一致
+            for (int i = 0; i < entry.getValue(); i++) {
+                context.addModifier(modifiers);
+            }
         }
     }
 

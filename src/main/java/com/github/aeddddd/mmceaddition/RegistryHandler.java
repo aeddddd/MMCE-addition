@@ -1,12 +1,16 @@
 package com.github.aeddddd.mmceaddition;
 
+import com.github.aeddddd.mmceaddition.block.BlockInputAssembly;
 import com.github.aeddddd.mmceaddition.block.BlockMEAsyncFluidOutputHatch;
 import com.github.aeddddd.mmceaddition.block.BlockMEAsyncItemOutputBus;
+import com.github.aeddddd.mmceaddition.block.BlockMEOutputAssembly;
 import com.github.aeddddd.mmceaddition.block.BlockMEPatternAssembly;
 import com.github.aeddddd.mmceaddition.block.BlockVirtualAssembler;
 import com.github.aeddddd.mmceaddition.block.BlockVirtualParallelHatch;
+import com.github.aeddddd.mmceaddition.tile.TileInputAssembly;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncFluidOutputHatch;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
+import com.github.aeddddd.mmceaddition.tile.TileMEOutputAssembly;
 import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
 import com.github.aeddddd.mmceaddition.virtual.ItemMachineData;
 import com.github.aeddddd.mmceaddition.virtual.RecipeMachineDataMerge;
@@ -52,6 +56,16 @@ public class RegistryHandler {
     public static final BlockMEPatternAssembly ME_PATTERN_ASSEMBLY = new BlockMEPatternAssembly();
 
     /**
+     * ME 输出总成仓方块实例（物品/流体输出 + 网络 RF 能源输入输出）。
+     */
+    public static final BlockMEOutputAssembly ME_OUTPUT_ASSEMBLY = new BlockMEOutputAssembly();
+
+    /**
+     * 输入总成仓方块实例（Long 上限物品/流体输入缓冲，不连 AE）。
+     */
+    public static final BlockInputAssembly INPUT_ASSEMBLY = new BlockInputAssembly();
+
+    /**
      * 虚拟装配台方块实例（单方块机器：把多方块机器装配为机器数据）。
      */
     public static final BlockVirtualAssembler VIRTUAL_ASSEMBLER = new BlockVirtualAssembler();
@@ -80,6 +94,8 @@ public class RegistryHandler {
                 ME_ASYNC_ITEM_OUTPUT_BUS,
                 ME_ASYNC_FLUID_OUTPUT_HATCH,
                 ME_PATTERN_ASSEMBLY,
+                ME_OUTPUT_ASSEMBLY,
+                INPUT_ASSEMBLY,
                 VIRTUAL_ASSEMBLER,
                 VIRTUAL_PARALLEL_HATCH
         );
@@ -93,6 +109,10 @@ public class RegistryHandler {
                 new ResourceLocation(MMCEAddition.MODID, "me_async_fluid_output_hatch"));
         GameRegistry.registerTileEntity(TileMEPatternAssembly.class,
                 new ResourceLocation(MMCEAddition.MODID, "me_pattern_assembly"));
+        GameRegistry.registerTileEntity(TileMEOutputAssembly.class,
+                new ResourceLocation(MMCEAddition.MODID, "me_output_assembly"));
+        GameRegistry.registerTileEntity(TileInputAssembly.class,
+                new ResourceLocation(MMCEAddition.MODID, "input_assembly"));
         GameRegistry.registerTileEntity(TileVirtualAssembler.class,
                 new ResourceLocation(MMCEAddition.MODID, "virtual_assembler"));
         GameRegistry.registerTileEntity(TileVirtualParallelHatch.class,
@@ -118,6 +138,10 @@ public class RegistryHandler {
                         .setRegistryName(ME_ASYNC_FLUID_OUTPUT_HATCH.getRegistryName()),
                 new ItemBlock(ME_PATTERN_ASSEMBLY)
                         .setRegistryName(ME_PATTERN_ASSEMBLY.getRegistryName()),
+                new ItemBlock(ME_OUTPUT_ASSEMBLY)
+                        .setRegistryName(ME_OUTPUT_ASSEMBLY.getRegistryName()),
+                new ItemBlock(INPUT_ASSEMBLY)
+                        .setRegistryName(INPUT_ASSEMBLY.getRegistryName()),
                 new ItemBlock(VIRTUAL_ASSEMBLER)
                         .setRegistryName(VIRTUAL_ASSEMBLER.getRegistryName()),
                 new ItemBlock(VIRTUAL_PARALLEL_HATCH)

@@ -32,18 +32,23 @@ public class RecipeMachineDataMerge extends IForgeRegistryEntry.Impl<IRecipe> im
         }
         long sum = 0;
         java.util.Map<String, Integer> upgrades = new java.util.LinkedHashMap<>();
+        java.util.Map<String, Integer> parallelismSnapshot = new java.util.LinkedHashMap<>();
         for (int i = 0; i < inv.getSizeInventory(); i++) {
             ItemStack stack = inv.getStackInSlot(i);
             if (!stack.isEmpty()) {
                 sum += ItemMachineData.getCount(stack);
-                // 升级记录一并合并（数量相加）
+                // 升级记录与并行度快照一并合并（数量相加、快照取最大）
                 for (java.util.Map.Entry<String, Integer> entry : ItemMachineData.getUpgrades(stack).entrySet()) {
                     upgrades.merge(entry.getKey(), entry.getValue(), Integer::sum);
+                }
+                for (java.util.Map.Entry<String, Integer> entry : ItemMachineData.getUpgradeParallelismMap(stack).entrySet()) {
+                    parallelismSnapshot.merge(entry.getKey(), entry.getValue(), Math::max);
                 }
             }
         }
         ItemStack result = ItemMachineData.createStack(target.machineName, (int) Math.min(sum, Integer.MAX_VALUE));
         ItemMachineData.addUpgrades(result, upgrades);
+        ItemMachineData.addUpgradeParallelism(result, parallelismSnapshot);
         return result;
     }
 
