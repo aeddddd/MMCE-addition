@@ -13,6 +13,7 @@ import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
 import com.github.aeddddd.mmceaddition.tile.TileMEOutputAssembly;
 import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
 import com.github.aeddddd.mmceaddition.virtual.ItemMachineData;
+import com.github.aeddddd.mmceaddition.virtual.RecipeMachineDataClearUpgrades;
 import com.github.aeddddd.mmceaddition.virtual.RecipeMachineDataMerge;
 import com.github.aeddddd.mmceaddition.virtual.TileVirtualAssembler;
 import com.github.aeddddd.mmceaddition.virtual.TileVirtualParallelHatch;
@@ -163,5 +164,8 @@ public class RegistryHandler {
     public void onRecipeRegister(RegistryEvent.Register<IRecipe> event) {
         event.getRegistry().register(new RecipeMachineDataMerge()
                 .setRegistryName(new ResourceLocation(MMCEAddition.MODID, "machine_data_merge")));
+        // 机器数据清空升级配方：单个带升级记录的机器数据合成一次，清空升级记录
+        event.getRegistry().register(new RecipeMachineDataClearUpgrades()
+                .setRegistryName(new ResourceLocation(MMCEAddition.MODID, "machine_data_clear_upgrades")));
     }
 }

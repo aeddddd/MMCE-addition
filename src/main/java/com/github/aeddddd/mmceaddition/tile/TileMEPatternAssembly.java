@@ -19,6 +19,7 @@ import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.compat.NetworkEnergyCompat;
 import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
+import com.github.aeddddd.mmceaddition.tile.provider.AssemblyResourceComponents;
 import com.github.aeddddd.mmceaddition.tile.slot.PatternAssemblySlot;
 import com.github.aeddddd.mmceaddition.util.ItemVariant;
 import com.github.aeddddd.mmceaddition.util.LongBufferFluidHandler;
@@ -37,6 +38,7 @@ import github.kasuminova.mmce.common.event.recipe.RecipeStartEvent;
 import github.kasuminova.mmce.common.event.recipe.RecipeTickEvent;
 import appeng.api.implementations.ICraftingPatternItem;
 import github.kasuminova.mmce.common.tile.base.MEMachineComponent;
+import hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent;
 import hellfirepvp.modularmachinery.common.crafting.requirement.RequirementCatalyst;
 import hellfirepvp.modularmachinery.common.crafting.requirement.RequirementFluid;
 import hellfirepvp.modularmachinery.common.crafting.requirement.RequirementIngredientArray;
@@ -392,6 +394,31 @@ public class TileMEPatternAssembly extends MEMachineComponent
     }
 
     /**
+     * 自定义能源输出仓组件。
+     * <p>
+     * 让 MMCE 的 RequirementEnergy(OUTPUT) 把样板总成识别为能源出口，
+     * 配方产出的 RF 直接回注 AE 网络存储。
+     */
+    public static class PatternAssemblyEnergyOutputHatch extends MachineComponent.EnergyHatch {
+        private final TileMEPatternAssembly assembly;
+
+        public PatternAssemblyEnergyOutputHatch(TileMEPatternAssembly assembly) {
+            super(IOType.OUTPUT);
+            this.assembly = assembly;
+        }
+
+        @Nonnull
+        @Override
+        public IEnergyHandlerAsync getContainerProvider() {
+            return assembly.energyHandler;
+        }
+
+        public TileMEPatternAssembly getAssembly() {
+            return assembly;
+        }
+    }
+
+    /**
      * 网络 RF 能源处理器。
      * <p>
      * 实现 MMCE 的 long 级异步能源接口，把"当前能量/提取能量"直接映射为
@@ -401,7 +428,7 @@ public class TileMEPatternAssembly extends MEMachineComponent
      *   <li>{@link #extractEnergy(long)}：全有或全无——先模拟确认存量充足再实际扣除，
      *       避免 RequirementEnergy 把部分提取误判为成功</li>
      *   <li>{@link #setCurrentEnergy(long)}：空实现——异步路径不会调用；网络能量不支持本地写回</li>
-     *   <li>{@link #receiveEnergy(long)}：恒 false——只作为能源输入，不接收外部能量</li>
+     *   <li>{@link #receiveEnergy(long)}：配方产 RF 时回注网络（全有或全无，先模拟再实际注入）</li>
      *   <li>未安装 AE2Enhanced 时表现为 0 能量，机器报缺能量，不会崩溃</li>
      * </ul>
      */
@@ -436,6 +463,11 @@ public class TileMEPatternAssembly extends MEMachineComponent
 
         @Override
         public boolean receiveEnergy(long amount) {
+            // 全有或全无：先模拟确认网络可完整容纳本次产出，再实际回注
+            if (NetworkEnergyCompat.insertEnergy(TileMEPatternAssembly.this, amount, true) >= amount) {
+                NetworkEnergyCompat.insertEnergy(TileMEPatternAssembly.this, amount, false);
+                return true;
+            }
             return false;
         }
     }
@@ -608,6 +640,13 @@ public class TileMEPatternAssembly extends MEMachineComponent
             // 结构更新时刷新 AE 样板，并通知网络重新扫描可合成物品。
             refreshPatterns();
             postPatternChangeEvent();
+            // MMCE 在结构破坏后重组时会静默丢弃进行中的配方
+            //（onStructureFormed → resetRecipe / 控制器 invalidate 均不投递
+            // RecipeFinish/RecipeFailure 事件），此处主动释放槽位锁定与 ThreadLocal，
+            // 避免残留的 currentCraftingSlot/activeSlotIndex 让后续无事件复核永远命中
+            // 错误的槽位，导致机器陷入持续性闲置。
+            clearCurrentCraftingSlot();
+            clearActiveSlot();
             return;
         }
         // MMCE 2.2.2 的机器事件不投递到 Forge 事件总线，
@@ -755,6 +794,9 @@ public class TileMEPatternAssembly extends MEMachineComponent
             MMCEAddition.LOGGER.debug("MEPatternAssembly at {} recipe finish -> clear lockedSlot={}", getPos(), currentCraftingSlot);
         }
         clearCurrentCraftingSlot();
+        // 防御性清除：正常完成路径上 RecipeTickEvent.END 已清过 ThreadLocal，
+        // 但 waitForFinish 等路径不一定经过 END，remove() 幂等，重复清除无副作用。
+        clearActiveSlot();
     }
 
     public void onRecipeFailure() {
@@ -762,6 +804,12 @@ public class TileMEPatternAssembly extends MEMachineComponent
             MMCEAddition.LOGGER.debug("MEPatternAssembly at {} recipe failure -> clear lockedSlot={}", getPos(), currentCraftingSlot);
         }
         clearCurrentCraftingSlot();
+        // 关键修复：MMCE 在 per-tick 检查失败销毁配方时（doRecipeTick → isNotWorking），
+        // 只会投递 RecipeFailureEvent，不会投递 RecipeTickEvent.END，
+        // 主线程的 activeSlotIndex 因此残留旧槽位。若不清除，机器回到闲置后，
+        // 主线程无事件的复核（searchAndStartRecipe → canStartCrafting）会永远命中
+        // 残留槽位，导致复核持续失败、机器陷入持续性闲置。
+        clearActiveSlot();
     }
 
     private void setCurrentCraftingSlot(int slot) {
@@ -925,6 +973,72 @@ public class TileMEPatternAssembly extends MEMachineComponent
         return false;
     }
 
+    // ==================== TOP 兼容用状态汇总 ====================
+
+    /**
+     * AE 网络是否已连接且激活（有频道、有能源）。
+     */
+    public boolean isNetworkActive() {
+        return proxy != null && proxy.isActive();
+    }
+
+    /**
+     * 已放入样板的槽位数（0 ~ PATTERNS）。
+     */
+    public int getUsedPatternSlotCount() {
+        int used = 0;
+        for (int i = 0; i < patterns.getSlots(); i++) {
+            if (!patterns.getStackInSlot(i).isEmpty()) {
+                used++;
+            }
+        }
+        return used;
+    }
+
+    /**
+     * 全部样板槽的输入物品缓冲总量（个）。
+     */
+    public long getTotalBufferedInputItems() {
+        long total = 0;
+        for (PatternAssemblySlot slot : slots) {
+            total += slot.getInputItemBuffer().getTotalAmount();
+        }
+        return total;
+    }
+
+    /**
+     * 全部样板槽的输入流体缓冲总量（mB）。
+     */
+    public long getTotalBufferedInputFluids() {
+        long total = 0;
+        for (PatternAssemblySlot slot : slots) {
+            total += slot.getInputFluidBuffer().getTotalAmount();
+        }
+        return total;
+    }
+
+    /**
+     * 全部样板槽的输出物品缓冲总量（个）。
+     */
+    public long getTotalBufferedOutputItems() {
+        long total = 0;
+        for (PatternAssemblySlot slot : slots) {
+            total += slot.getOutputItemBuffer().getTotalAmount();
+        }
+        return total;
+    }
+
+    /**
+     * 全部样板槽的输出流体缓冲总量（mB）。
+     */
+    public long getTotalBufferedOutputFluids() {
+        long total = 0;
+        for (PatternAssemblySlot slot : slots) {
+            total += slot.getOutputFluidBuffer().getTotalAmount();
+        }
+        return total;
+    }
+
     // ==================== 生命周期 ====================
 
     private boolean registered = false;
@@ -959,6 +1073,49 @@ public class TileMEPatternAssembly extends MEMachineComponent
             MEAsyncOutputManager.INSTANCE.unregister(this);
             registered = false;
         }
+    }
+
+    /**
+     * 创建能源输出 ProcessingComponent（配方产 RF 时回注 AE 网络）.
+     */
+    public ProcessingComponent<?> createEnergyOutputProcessingComponent() {
+        return wrapComponent(new PatternAssemblyEnergyOutputHatch(this));
+    }
+
+    /**
+     * 创建网络魔力输入 ProcessingComponent；Botania / AE2Enhanced Mana API 不可用时返回 null.
+     */
+    @Nullable
+    public ProcessingComponent<?> createManaInputProcessingComponent() {
+        return wrapComponent(AssemblyResourceComponents.createManaInput(this));
+    }
+
+    /**
+     * 创建网络星能输入 ProcessingComponent；Astral Sorcery / AE2Enhanced Starlight API 不可用时返回 null.
+     */
+    @Nullable
+    public ProcessingComponent<?> createStarlightInputProcessingComponent() {
+        return wrapComponent(AssemblyResourceComponents.createStarlightInput(this));
+    }
+
+    /**
+     * 创建网络源质输入 ProcessingComponent；Thaumcraft / ThaumicEnergistics 不可用时返回 null.
+     */
+    @Nullable
+    public ProcessingComponent<?> createAspectInputProcessingComponent() {
+        return wrapComponent(AssemblyResourceComponents.createAspectInput(this));
+    }
+
+    /**
+     * 把通配 MachineComponent 包装为 ProcessingComponent；null 输入原样返回 null.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    @Nullable
+    private static ProcessingComponent<?> wrapComponent(@Nullable MachineComponent<?> component) {
+        if (component == null) {
+            return null;
+        }
+        return new ProcessingComponent(component, component.getContainerProvider(), null);
     }
 
     // ==================== NBT 序列化 ====================

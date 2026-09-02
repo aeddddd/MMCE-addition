@@ -194,6 +194,18 @@ public class MMCEAdditionConfig {
     public static int virtualAssemblerBufferSlots = 216;
 
     /**
+     * 虚拟装配台额外排除的方块注册名列表（附属仓室等）。
+     * <p>
+     * 生成机器材料清单时，注册名以列表中任一条目开头的方块都不会计入材料。
+     * MMCE 及内置 ModularMagic 的仓室已按类层级自动排除，本列表用于排除
+     * 其他附属模组的仓室（如源质输入仓等）。支持完整注册名或前缀（如 modid:）。
+     */
+    @Config.Name("virtual_assembler_excluded_blocks")
+    @Config.Comment("虚拟装配台生成材料清单时额外排除的方块注册名列表（支持完整注册名或前缀），用于排除其他附属模组的仓室（如源质输入仓）")
+    @Config.LangKey("config.mmceaddition.virtual_assembler_excluded_blocks")
+    public static String[] virtualAssemblerExcludedBlocks = new String[0];
+
+    /**
      * 是否允许虚拟并行仓替换机器 JSON 中任意仓室位置。
      */
     @Config.Name("enable_virtual_hatch_compat")
@@ -208,6 +220,64 @@ public class MMCEAdditionConfig {
     @Config.Comment("输出虚拟并行调试日志（材料清单生成、虚拟系数计算）")
     @Config.LangKey("config.mmceaddition.debug_virtual_parallel")
     public static boolean debugVirtualParallel = false;
+
+    /**
+     * 是否启用配方输出加和。
+     * <p>
+     * 针对"所有输入均不消耗（chance &lt;= 0）"的配方：活动配方完成时，
+     * 若同机器其余可加和配方的不消耗输入也全部存在于仓室中，
+     * 把它们的产物按当前 modifier × 并行度追加进本次输出。
+     * 放几种不消耗材料就同时出几种产物，一台机器即可替代多台。
+     * 加和量较大时请注意为机器配备足够的输出仓室。
+     */
+    @Config.Name("enable_recipe_output_summation")
+    @Config.Comment("启用配方输出加和：全不消耗输入的配方，输入几种材料就同时输出几种产物（乘并行度，空间不足的产物跳过不扣除）")
+    @Config.LangKey("config.mmceaddition.enable_recipe_output_summation")
+    public static boolean enableRecipeOutputSummation = true;
+
+    /**
+     * 配方输出加和机器黑名单。
+     * <p>
+     * 列表中的机器不参与输出加和，保持原行为。可写完整注册名（如 modularmachinery:xxx）
+     * 或仅路径部分。
+     */
+    @Config.Name("recipe_summation_machine_blacklist")
+    @Config.Comment("不参与配方输出加和的机器注册名列表（完整名或路径均可）")
+    @Config.LangKey("config.mmceaddition.recipe_summation_machine_blacklist")
+    public static String[] recipeSummationMachineBlacklist = new String[0];
+
+    /**
+     * 自动 IO 切换物品列表。
+     * <p>
+     * 手持列表中的物品右键 MMCE 的物品输入/输出总线或能源输入/输出仓，
+     * 可切换该仓室的自动 IO 开关（关闭后不再向邻接容器自动抽取/推送）。
+     * 条目格式：{@code modid:name}（匹配任意 meta）或 {@code modid:name:meta}（指定 meta）。
+     * 默认包含各主流模组的扳手类工具。
+     */
+    @Config.Name("auto_io_toggle_items")
+    @Config.Comment("手持列表物品右键 MMCE 物品总线/能源仓可切换其自动 IO。格式 modid:name 或 modid:name:meta。默认包含各类扳手")
+    @Config.LangKey("config.mmceaddition.auto_io_toggle_items")
+    public static String[] autoIOToggleItems = new String[]{
+            "appliedenergistics2:certus_quartz_wrench",
+            "appliedenergistics2:nether_quartz_wrench",
+            "thermalfoundation:wrench",
+            "enderio:item_yeta_wrench",
+            "mekanism:configurator",
+            "buildcraftcore:wrench",
+            "ic2:wrench",
+            "forestry:wrench",
+            "actuallyadditions:item_laser_wrench",
+            "rftools:smartwrench",
+            "pneumaticcraft:pneumatic_wrench"
+    };
+
+    /**
+     * 是否输出配方输出加和调试日志。
+     */
+    @Config.Name("debug_recipe_summation")
+    @Config.Comment("输出配方输出加和调试日志（可加和配方识别、每次附加产出明细）")
+    @Config.LangKey("config.mmceaddition.debug_recipe_summation")
+    public static boolean debugRecipeSummation = false;
 
     /**
      * 配置变更事件处理器。

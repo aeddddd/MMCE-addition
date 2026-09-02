@@ -1,5 +1,6 @@
 {
   "package": "com.github.aeddddd.mmceaddition.mixin",
+  "plugin": "com.github.aeddddd.mmceaddition.mixin.MMCEAdditionMixinPlugin",
   "minVersion": "0.7",
   "compatibilityLevel": "JAVA_8",
   "mixins": [
@@ -8,11 +9,18 @@
     "CraftingCPUClusterMixin",
     "DynamicMachineMixin",
     "MachineRegistryMixin",
+    "MixinAspectProviderCopy",
     "ParallelismControllerMixin",
     "RecipeCraftingContextMixin",
+    "RecipeCraftingContextSumMixin",
     "RequirementFluidMixin",
     "RequirementIngredientArrayMixin",
-    "RequirementItemMixin"
+    "RequirementItemMixin",
+    "TileEnergyHatchMixin",
+    "TileEnergyOutputHatchMixin",
+    "TileItemBusMixin",
+    "TileItemInputBusMixin",
+    "TileItemOutputBusMixin"
   ],
   "client": [],
   "injectors": {

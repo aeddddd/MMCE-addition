@@ -129,6 +129,19 @@ public class ItemMachineData extends Item {
     }
 
     /**
+     * 清空升级记录与并行度快照（保留机器名与内部存储数量）。
+     * 机器数据单独放入合成台进行一次合成即可触发，见 RecipeMachineDataClearUpgrades。
+     */
+    public static void clearUpgrades(@Nonnull ItemStack stack) {
+        NBTTagCompound tag = stack.getTagCompound();
+        if (tag == null) {
+            return;
+        }
+        tag.removeTag(TAG_UPGRADES);
+        tag.removeTag(TAG_UPGRADE_PARALLELISM);
+    }
+
+    /**
      * 合并写入升级并行度快照（同名取最大值）。
      */
     public static void addUpgradeParallelism(@Nonnull ItemStack stack, @Nonnull java.util.Map<String, Integer> snapshot) {
@@ -256,6 +269,7 @@ public class ItemMachineData extends Item {
                 }
                 tooltip.add("  §7" + entry.getKey() + " §ex" + entry.getValue());
             }
+            tooltip.add(I18n.format("tooltip.mmceaddition.machine_data.clear_hint"));
         }
         tooltip.add(I18n.format("tooltip.mmceaddition.machine_data.usage"));
     }

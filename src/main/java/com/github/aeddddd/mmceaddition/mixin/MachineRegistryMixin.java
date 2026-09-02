@@ -2,6 +2,7 @@ package com.github.aeddddd.mmceaddition.mixin;
 
 import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
 import com.github.aeddddd.mmceaddition.parallel.FakeParallelMigrator;
+import com.github.aeddddd.mmceaddition.sum.RecipeOutputSummator;
 import com.github.aeddddd.mmceaddition.virtual.VirtualParallelManager;
 import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
 import hellfirepvp.modularmachinery.common.machine.MachineRegistry;
@@ -45,5 +46,7 @@ public class MachineRegistryMixin {
         }
         // 虚拟并行：为所有非黑名单机器打开原生并行开关并抬高机器级上限兜底
         VirtualParallelManager.onMachinesRegistered(machines);
+        // 配方加和：清空可加和配方缓存，下次配方完成时按最新配方重新识别
+        RecipeOutputSummator.onMachinesRegistered();
     }
 }

@@ -13,6 +13,7 @@ import appeng.me.helpers.MachineSource;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.compat.NetworkEnergyCompat;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
+import com.github.aeddddd.mmceaddition.tile.provider.AssemblyResourceComponents;
 import com.github.aeddddd.mmceaddition.util.IBufferObserver;
 import com.github.aeddddd.mmceaddition.util.LongBufferFluidHandler;
 import com.github.aeddddd.mmceaddition.util.LongBufferItemHandler;
@@ -114,6 +115,42 @@ public class TileMEOutputAssembly extends TileColorableMachineComponent
      */
     public ProcessingComponent<IEnergyHandlerAsync> createEnergyOutputProcessingComponent() {
         return new ProcessingComponent<>(new OutputAssemblyEnergyOutputHatch(this), energyHandler, null);
+    }
+
+    /**
+     * 创建网络魔力输入 ProcessingComponent；Botania / AE2Enhanced Mana API 不可用时返回 null.
+     */
+    @Nullable
+    public ProcessingComponent<?> createManaInputProcessingComponent() {
+        return wrapComponent(AssemblyResourceComponents.createManaInput(this));
+    }
+
+    /**
+     * 创建网络星能输入 ProcessingComponent；Astral Sorcery / AE2Enhanced Starlight API 不可用时返回 null.
+     */
+    @Nullable
+    public ProcessingComponent<?> createStarlightInputProcessingComponent() {
+        return wrapComponent(AssemblyResourceComponents.createStarlightInput(this));
+    }
+
+    /**
+     * 创建网络源质输入 ProcessingComponent；Thaumcraft / ThaumicEnergistics 不可用时返回 null.
+     */
+    @Nullable
+    public ProcessingComponent<?> createAspectInputProcessingComponent() {
+        return wrapComponent(AssemblyResourceComponents.createAspectInput(this));
+    }
+
+    /**
+     * 把通配 MachineComponent 包装为 ProcessingComponent；null 输入原样返回 null.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    @Nullable
+    private static ProcessingComponent<?> wrapComponent(@Nullable MachineComponent<?> component) {
+        if (component == null) {
+            return null;
+        }
+        return new ProcessingComponent(component, component.getContainerProvider(), null);
     }
 
     public LongItemBuffer getItemBuffer() {

@@ -120,24 +120,27 @@ public class RecipeCraftingContextMixin {
                 if (result == null) {
                     result = new ArrayList<>(components);
                 }
-                // 移除原来的单个输入组件，替换为五个独立组件（含网络 RF 能源输入）
+                // 移除原来的单个输入组件，替换为独立组件（含网络 RF 能源输入/输出与网络资源输入）
                 result.remove(pc);
                 result.add(assembly.createItemInputProcessingComponent());
                 result.add(assembly.createItemOutputProcessingComponent());
                 result.add(assembly.createFluidInputProcessingComponent());
                 result.add(assembly.createFluidOutputProcessingComponent());
                 result.add(assembly.createEnergyInputProcessingComponent());
+                result.add(assembly.createEnergyOutputProcessingComponent());
+                mmceaddition$addNetworkResourceComponents(result, assembly);
             } else if (pc.getComponent() instanceof TileMEOutputAssembly.OutputAssemblyItemOutputBus) {
                 TileMEOutputAssembly assembly = ((TileMEOutputAssembly.OutputAssemblyItemOutputBus) pc.getComponent()).getAssembly();
                 if (result == null) {
                     result = new ArrayList<>(components);
                 }
-                // 移除标记组件，展开为物品输出、流体输出、能源输入、能源输出四个独立组件
+                // 移除标记组件，展开为物品输出、流体输出、能源输入、能源输出及网络资源输入组件
                 result.remove(pc);
                 result.add(assembly.createItemOutputProcessingComponent());
                 result.add(assembly.createFluidOutputProcessingComponent());
                 result.add(assembly.createEnergyInputProcessingComponent());
                 result.add(assembly.createEnergyOutputProcessingComponent());
+                mmceaddition$addNetworkResourceComponents(result, assembly);
             } else if (pc.getComponent() instanceof TileInputAssembly.InputAssemblyItemInputBus) {
                 TileInputAssembly assembly = ((TileInputAssembly.InputAssemblyItemInputBus) pc.getComponent()).getAssembly();
                 if (result == null) {
@@ -200,6 +203,8 @@ public class RecipeCraftingContextMixin {
                         expanded.add(assembly.createFluidInputProcessingComponent());
                         expanded.add(assembly.createFluidOutputProcessingComponent());
                         expanded.add(assembly.createEnergyInputProcessingComponent());
+                        expanded.add(assembly.createEnergyOutputProcessingComponent());
+                        mmceaddition$addNetworkResourceComponents(expanded, assembly);
                     } else if (pc.getComponent() instanceof TileMEOutputAssembly.OutputAssemblyItemOutputBus) {
                         TileMEOutputAssembly assembly =
                                 ((TileMEOutputAssembly.OutputAssemblyItemOutputBus) pc.getComponent()).getAssembly();
@@ -209,10 +214,11 @@ public class RecipeCraftingContextMixin {
                         if (mmceaddition$alreadyExpandedOutput(expanded, assembly)) {
                             continue;
                         }
-                        // 标记组件本身就是物品输出组件，保留在桶中；追加其余三个组件
+                        // 标记组件本身就是物品输出组件，保留在桶中；追加其余组件
                         expanded.add(assembly.createFluidOutputProcessingComponent());
                         expanded.add(assembly.createEnergyInputProcessingComponent());
                         expanded.add(assembly.createEnergyOutputProcessingComponent());
+                        mmceaddition$addNetworkResourceComponents(expanded, assembly);
                     } else if (pc.getComponent() instanceof TileInputAssembly.InputAssemblyItemInputBus) {
                         TileInputAssembly assembly =
                                 ((TileInputAssembly.InputAssemblyItemInputBus) pc.getComponent()).getAssembly();
@@ -263,5 +269,27 @@ public class RecipeCraftingContextMixin {
             }
         }
         return false;
+    }
+
+    /**
+     * 追加网络资源输入组件（魔力/星能/源质），对应 mod 或网络 API 不可用时
+     * 工厂返回 null，跳过即可。
+     */
+    private void mmceaddition$addNetworkResourceComponents(List<ProcessingComponent<?>> list, TileMEPatternAssembly assembly) {
+        mmceaddition$addIfPresent(list, assembly.createManaInputProcessingComponent());
+        mmceaddition$addIfPresent(list, assembly.createStarlightInputProcessingComponent());
+        mmceaddition$addIfPresent(list, assembly.createAspectInputProcessingComponent());
+    }
+
+    private void mmceaddition$addNetworkResourceComponents(List<ProcessingComponent<?>> list, TileMEOutputAssembly assembly) {
+        mmceaddition$addIfPresent(list, assembly.createManaInputProcessingComponent());
+        mmceaddition$addIfPresent(list, assembly.createStarlightInputProcessingComponent());
+        mmceaddition$addIfPresent(list, assembly.createAspectInputProcessingComponent());
+    }
+
+    private void mmceaddition$addIfPresent(List<ProcessingComponent<?>> list, ProcessingComponent<?> component) {
+        if (component != null) {
+            list.add(component);
+        }
     }
 }

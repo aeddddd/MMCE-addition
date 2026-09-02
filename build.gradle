@@ -20,7 +20,7 @@ buildscript {
 apply plugin: 'net.minecraftforge.gradle.forge'
 
 // 模组版本、Maven 坐标、构建产物名。
-version = '1.3beta'
+version = '1.4beta'
 group = 'com.github.aeddddd'
 archivesBaseName = 'MMCE-addition'
 
@@ -58,12 +58,14 @@ repositories {
     }
     mavenCentral()
     maven { url = 'https://repo.spongepowered.org/maven' }
+    // Modrinth Maven：提供 The One Probe（TOP 兼容层的编译期依赖）。
+    maven { url = 'https://api.modrinth.com/maven' }
 }
 
 dependencies {
     // MMCE 与 AE2UEL 本地依赖，使用 deobfCompile 反混淆。
     // deobfCompile 是 ForgeGradle 提供的配置，会把 JAR 反混淆为开发环境可读的名称。
-    deobfCompile name: 'ModularMachinery-CE-2.2.2'
+    deobfCompile name: 'ModularMachinery-CE-2.3.2'
     deobfCompile name: 'ae2-uel-v0.56.7'
     // AE2 Fluid Crafting：仅编译期引用其流体假物品 API（FakeFluids/FakeItemRegister），
     // 运行时为可选软依赖，代码中通过 Loader.isModLoaded("ae2fc") 保护。
@@ -73,6 +75,16 @@ dependencies {
     deobfCompile name: 'geckolib-forge-1.12.2-3.0.30'
     // HadEnoughItems（JEI 的 1.12.2 分支）：虚拟装配台配方列表（@JEIPlugin 仅在 HEI 存在时加载，天然软依赖）
     deobfCompile name: 'HadEnoughItems_1.12.2-4.29.15'
+    // The One Probe：仓室状态信息展示（Eyw0UxEx = theoneprobe 1.12-1.4.28，运行时为软依赖，
+    // 通过 IMC 注册 Provider，未安装时回调类不会被加载）
+    deobfCompile 'maven.modrinth:Eyw0UxEx:VYorc4gX'
+
+    // 可选集成的编译期依赖：Thaumcraft / Botania / Astral Sorcery
+    // （网络资源 provider 继承其 Tile 基类；运行时为软依赖，经 Loader.isModLoaded 条件加载，
+    //   与 AE2Enhanced 侧 compileOnly files(...) 的处理方式一致）
+    compileOnly files('../AE2Enhanced/libs/Thaumcraft-1.12.2-6.1.BETA26.jar')
+    compileOnly files('../AE2Enhanced/libs/Botania r1.10-364.4.jar')
+    compileOnly files('../AE2Enhanced/libs-unused/astralsorcery-1.12.2-1.10.27.jar')
 
     // Mixin 编译期依赖（运行时由 MixinBooter 提供）。
     // compileOnly 表示编译时需要，但不会打包进最终产物。

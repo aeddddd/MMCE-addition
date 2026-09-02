@@ -8,6 +8,7 @@ import hellfirepvp.modularmachinery.common.crafting.requirement.RequirementCatal
 import hellfirepvp.modularmachinery.common.crafting.requirement.RequirementIngredientArray;
 import hellfirepvp.modularmachinery.common.machine.IOType;
 import hellfirepvp.modularmachinery.common.util.ResultChance;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -36,8 +37,12 @@ public abstract class RequirementIngredientArrayMixin {
     @Shadow
     public float chance;
 
+    // 注意：shadow final 字段不能写 "= null" 初值——Mixin 会把初值赋值注入目标类
+    // 所有构造函数的末尾（applyInitialisers），把真实构造时赋好的 ingredients 覆盖为 null。
+    // 正确写法：@Final 注解 + 非 final Java 字段 + 无初值。
     @Shadow
-    protected final List<ChancedIngredientStack> ingredients = null;
+    @Final
+    protected List<ChancedIngredientStack> ingredients;
 
     @Shadow
     private int doItemIOInternal(List<ProcessingComponent<?>> components, RecipeCraftingContext context,

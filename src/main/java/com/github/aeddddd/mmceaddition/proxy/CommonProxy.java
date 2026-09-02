@@ -6,7 +6,9 @@ import com.github.aeddddd.mmceaddition.command.CommandMMCEAddition;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.config.ConfigManager;
+import net.minecraftforge.fml.common.Loader;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLInterModComms;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
@@ -48,11 +50,16 @@ public class CommonProxy {
     /**
      * 初始化。
      * <p>
-     * 当前没有需要在 Init 阶段执行的通用逻辑，保留空方法供子类扩展。
+     * 如果安装了 The One Probe，则通过 IMC 注册仓室状态信息 Provider。
+     * 回调类以全限定名字符串传递，TOP 存在时才会被反射加载（软依赖）。
      *
      * @param event 初始化事件
      */
     public void init(FMLInitializationEvent event) {
+        if (Loader.isModLoaded("theoneprobe")) {
+            FMLInterModComms.sendFunctionMessage("theoneprobe", "getTheOneProbe",
+                    "com.github.aeddddd.mmceaddition.compat.top.TOPCompatibility$GetTheOneProbe");
+        }
     }
 
     /**

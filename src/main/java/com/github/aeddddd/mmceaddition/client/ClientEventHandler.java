@@ -82,7 +82,12 @@ public class ClientEventHandler {
     /**
      * 物品 Tooltip 事件。
      * <p>
-     * 当玩家把鼠标悬停在物品上时触发。我们为本模组的两个方块物品添加多行说明。
+     * 当玩家把鼠标悬停在物品上时触发。Tooltip 分为两个分区：
+     * <ul>
+     *   <li>功能分区：该方块自身提供的功能（连接网络、输入/输出、样板槽等）</li>
+     *   <li>结构兼容分区：该方块可被 MMCE 结构识别为哪些原版仓室
+     *      （与 {@code BlockInformationMixin} 的匹配逻辑一一对应，受配置开关控制）</li>
+     * </ul>
      */
     @SubscribeEvent
     public static void onItemTooltip(ItemTooltipEvent event) {
@@ -91,38 +96,71 @@ public class ClientEventHandler {
         Item item = stack.getItem();
         List<String> tooltip = event.getToolTip();
         if (item == Item.getItemFromBlock(RegistryHandler.ME_ASYNC_ITEM_OUTPUT_BUS)) {
-            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_async_item_output_bus");
+            addFunctionLines(tooltip, "tooltip.mmceaddition.me_async_item_output_bus");
+            addCompatSection(tooltip, MMCEAdditionConfig.enableMEItemBusCompat, "item_output_bus");
         } else if (item == Item.getItemFromBlock(RegistryHandler.ME_ASYNC_FLUID_OUTPUT_HATCH)) {
-            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_async_fluid_output_hatch");
+            addFunctionLines(tooltip, "tooltip.mmceaddition.me_async_fluid_output_hatch");
+            addCompatSection(tooltip, MMCEAdditionConfig.enableMEFluidBusCompat, "fluid_output_hatch");
         } else if (item == Item.getItemFromBlock(RegistryHandler.ME_PATTERN_ASSEMBLY)) {
-            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_pattern_assembly");
+            addFunctionLines(tooltip, "tooltip.mmceaddition.me_pattern_assembly");
+            addCompatSection(tooltip, MMCEAdditionConfig.enableMEPatternAssemblyCompat,
+                    "item_input_bus", "item_output_bus", "fluid_input_hatch", "fluid_output_hatch",
+                    "energy_input_hatch", "pattern_provider");
         } else if (item == Item.getItemFromBlock(RegistryHandler.ME_OUTPUT_ASSEMBLY)) {
-            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.me_output_assembly");
+            addFunctionLines(tooltip, "tooltip.mmceaddition.me_output_assembly");
+            addCompatSection(tooltip, MMCEAdditionConfig.enableMEOutputAssemblyCompat,
+                    "item_input_bus", "item_output_bus", "fluid_input_hatch", "fluid_output_hatch",
+                    "energy_input_hatch", "energy_output_hatch");
         } else if (item == Item.getItemFromBlock(RegistryHandler.INPUT_ASSEMBLY)) {
-            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.input_assembly");
+            addFunctionLines(tooltip, "tooltip.mmceaddition.input_assembly");
+            addCompatSection(tooltip, MMCEAdditionConfig.enableInputAssemblyCompat,
+                    "item_input_bus", "item_output_bus", "fluid_input_hatch", "fluid_output_hatch");
         } else if (item == Item.getItemFromBlock(RegistryHandler.VIRTUAL_ASSEMBLER)) {
-            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.virtual_assembler");
+            addFunctionLines(tooltip, "tooltip.mmceaddition.virtual_assembler");
         } else if (item == Item.getItemFromBlock(RegistryHandler.VIRTUAL_PARALLEL_HATCH)) {
-            addMultiLineTooltip(tooltip, "tooltip.mmceaddition.virtual_parallel_hatch");
+            addFunctionLines(tooltip, "tooltip.mmceaddition.virtual_parallel_hatch");
+            addCompatSection(tooltip, MMCEAdditionConfig.enableVirtualHatchCompat,
+                    "item_input_bus", "item_output_bus", "fluid_input_hatch", "fluid_output_hatch",
+                    "energy_input_hatch", "energy_output_hatch", "pattern_provider");
         }
     }
 
     /**
-     * 读取语言文件中 line0 ~ line3 的四行 tooltip 并添加到列表。
+     * 功能分区：先输出"功能:"标题，再按 line0 ~ line7 顺序输出功能行。
      * <p>
-     * 语言键格式：baseKey.line0、baseKey.line1...
-     * I18n.format 的第二个参数是 injectionInterval，可以在 lang 文件里用 %d 显示当前间隔。
+     * 语言键格式：baseKey.line0、baseKey.line1... 遇到缺失的键即停止。
      *
      * @param tooltip 要追加的 tooltip 列表
      * @param baseKey 基础语言键
      */
-    private static void addMultiLineTooltip(List<String> tooltip, String baseKey) {
-        for (int i = 0; i < 4; i++) {
+    private static void addFunctionLines(List<String> tooltip, String baseKey) {
+        tooltip.add(I18n.format("tooltip.mmceaddition.features.header"));
+        for (int i = 0; i < 8; i++) {
             String key = baseKey + ".line" + i;
-            String text = I18n.format(key, MMCEAdditionConfig.injectionInterval);
-            if (!text.equals(key)) {
-                tooltip.add(text);
+            String text = I18n.format(key);
+            if (text.equals(key) || text.isEmpty()) {
+                break;
             }
+            tooltip.add(text);
+        }
+    }
+
+    /**
+     * 结构兼容分区：输出"可被识别为以下仓室:"标题与仓室列表。
+     * <p>
+     * 仅当对应配置开关启用时显示；开关关闭时结构匹配同样不生效，tooltip 一并隐藏。
+     *
+     * @param tooltip    要追加的 tooltip 列表
+     * @param compatEnabled 对应的结构兼容配置开关
+     * @param compatKeys 仓室语言键后缀（tooltip.mmceaddition.compat.&lt;key&gt;）
+     */
+    private static void addCompatSection(List<String> tooltip, boolean compatEnabled, String... compatKeys) {
+        if (!compatEnabled || compatKeys.length == 0) {
+            return;
+        }
+        tooltip.add(I18n.format("tooltip.mmceaddition.compat.header"));
+        for (String key : compatKeys) {
+            tooltip.add(I18n.format("tooltip.mmceaddition.compat." + key));
         }
     }
 }

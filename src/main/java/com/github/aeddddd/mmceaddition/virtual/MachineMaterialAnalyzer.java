@@ -3,6 +3,7 @@ package com.github.aeddddd.mmceaddition.virtual;
 import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
 import com.github.aeddddd.mmceaddition.util.ItemVariant;
+import hellfirepvp.modularmachinery.common.block.BlockMachineComponent;
 import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
 import hellfirepvp.modularmachinery.common.machine.TaggedPositionBlockArray;
 import hellfirepvp.modularmachinery.common.modifier.SingleBlockModifierReplacement;
@@ -337,12 +338,20 @@ public final class MachineMaterialAnalyzer {
 
     /**
      * 方块状态 → 物品形态；仓室方块与被移除的方块返回 null。
+     * <p>
+     * 仓室判定分三层（任一命中即排除）：
+     * <ol>
+     *   <li>类层级：MMCE 及其内置附属（ModularMagic 的源质/魔力/星光/生命仓等）
+     *       的所有仓室方块均继承 {@link BlockMachineComponent}，与注册名命名空间无关</li>
+     *   <li>注册名前缀：MMCE 原版各类仓室的硬编码兜底（见 {@link #isHatchBlock(String)}）</li>
+     *   <li>配置列表：{@code virtual_assembler_excluded_blocks}，供整合包排除其他附属模组的仓室</li>
+     * </ol>
      */
     @Nullable
     private static ItemStack toStack(@Nonnull IBlockState state) {
         Block block = state.getBlock();
         ResourceLocation regName = block.getRegistryName();
-        if (regName == null || isHatchBlock(regName.toString())) {
+        if (regName == null || block instanceof BlockMachineComponent || isHatchBlock(regName.toString())) {
             return null;
         }
         Item item = Item.getItemFromBlock(block);
@@ -363,10 +372,20 @@ public final class MachineMaterialAnalyzer {
     }
 
     /**
-     * 判断注册名是否属于 MMCE 的各类仓室方块（输入/输出总线、流体仓、能源仓、ME 样板供应器等）。
+     * 判断注册名是否属于应排除的仓室方块：
+     * MMCE 原版各类仓室（输入/输出总线、流体仓、能源仓、ME 样板供应器等）的硬编码兜底，
+     * 以及配置 {@code virtual_assembler_excluded_blocks} 中登记的附属仓室（支持完整注册名或前缀）。
      */
     public static boolean isHatchBlock(@Nullable String regName) {
-        if (regName == null || !regName.startsWith("modularmachinery:")) {
+        if (regName == null) {
+            return false;
+        }
+        for (String excluded : MMCEAdditionConfig.virtualAssemblerExcludedBlocks) {
+            if (excluded != null && !excluded.isEmpty() && regName.startsWith(excluded)) {
+                return true;
+            }
+        }
+        if (!regName.startsWith("modularmachinery:")) {
             return false;
         }
         String path = regName.substring("modularmachinery:".length());
