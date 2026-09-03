@@ -103,7 +103,9 @@ public class ContainerInterfaceTerminalMixin {
         }
     }
 
-    @Inject(method = "detectAndSendChanges", remap = false,
+    // detectAndSendChanges 覆写了 Minecraft Container 的方法，生产环境为 SRG 名 func_75142_b；
+    // 本项目不生成 refmap，需像 TileEnergyOutputHatchMixin 一样同时列出两个名字。
+    @Inject(method = {"detectAndSendChanges", "func_75142_b"}, remap = false,
             at = @At(value = "INVOKE", ordinal = 0, remap = false,
                     target = "Lappeng/api/networking/IGrid;getMachines(Ljava/lang/Class;)Lappeng/api/networking/IMachineSet;"))
     private void mmceaddition$countPatternAssemblies(CallbackInfo ci) {
