@@ -12,6 +12,7 @@ import appeng.me.helpers.AENetworkProxy;
 import appeng.me.helpers.IGridProxyable;
 import appeng.me.helpers.MachineSource;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
+import com.github.aeddddd.mmceaddition.gui.IBufferViewProvider;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
 import com.github.aeddddd.mmceaddition.util.IBufferObserver;
 import com.github.aeddddd.mmceaddition.util.LongBufferItemHandler;
@@ -44,7 +45,7 @@ import javax.annotation.Nullable;
  * </ul>
  */
 public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
-        implements MachineComponentTile, IActionHost, IGridProxyable, IBufferObserver {
+        implements MachineComponentTile, IActionHost, IGridProxyable, IBufferObserver, IBufferViewProvider {
 
     /**
      * 物品缓冲区。支持 Long 数量上限，可以累积远超普通槽位的产出。
@@ -107,6 +108,11 @@ public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
      * @return 内部 LongItemBuffer，供管理器读取和注入
      */
     public LongItemBuffer getItemBuffer() {
+        return itemBuffer;
+    }
+
+    @Override
+    public LongItemBuffer getViewItemBuffer() {
         return itemBuffer;
     }
 

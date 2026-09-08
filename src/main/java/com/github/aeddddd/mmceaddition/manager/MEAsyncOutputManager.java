@@ -126,6 +126,113 @@ public enum MEAsyncOutputManager {
      */
     private int rescanCounter = 0;
 
+    // ==================== 运行统计（仓室管理工具性能页数据源） ====================
+
+    /** 上一注入周期的总耗时（微秒）。 */
+    private long statLastCycleMicros;
+    /** 上一注入周期实际注入网络的物品数量。 */
+    private long statLastInjectedItems;
+    /** 上一注入周期实际注入网络的流体量（mB）。 */
+    private long statLastInjectedFluids;
+    /** 累计完成的注入周期数。 */
+    private long statTotalCycles;
+    /** 本周期累计注入物品数（周期结束时转移到 statLastInjectedItems）。 */
+    private long cycleInjectedItems;
+    /** 本周期累计注入流体量（mB）。 */
+    private long cycleInjectedFluids;
+    /** 本周期注入操作次数（每次成功注入一种物品/流体计一次）。 */
+    private int cycleInjectedOps;
+    /** 累计注入物品总数。 */
+    private long statTotalInjectedItems;
+    /** 累计注入流体总量（mB）。 */
+    private long statTotalInjectedFluids;
+    /** 累计注入操作次数。 */
+    private long statTotalOps;
+
+    /** 历史曲线长度（注入周期数）。 */
+    private static final int HISTORY = 60;
+    /** 每周期耗时（微秒）环形历史。 */
+    private final long[] historyCycleMicros = new long[HISTORY];
+    /** 每周期注入物品数环形历史。 */
+    private final long[] historyInjectedItems = new long[HISTORY];
+    /** 每周期注入流体量（mB）环形历史。 */
+    private final long[] historyInjectedFluids = new long[HISTORY];
+    /** 每周期注入操作次数环形历史。 */
+    private final int[] historyInjectedOps = new int[HISTORY];
+    /** 下一个写入位置（环形）。 */
+    private int historyIndex;
+
+    public long getStatTotalInjectedItems() {
+        return statTotalInjectedItems;
+    }
+
+    public long getStatTotalInjectedFluids() {
+        return statTotalInjectedFluids;
+    }
+
+    public long getStatTotalOps() {
+        return statTotalOps;
+    }
+
+    /** 周期耗时历史（微秒，时间序）。 */
+    public long[] getHistoryCycleMicros() {
+        return copyLongHistory(historyCycleMicros);
+    }
+
+    /** 每周期注入物品数历史（时间序）。 */
+    public long[] getHistoryInjectedItems() {
+        return copyLongHistory(historyInjectedItems);
+    }
+
+    /** 每周期注入流体量历史（mB，时间序）。 */
+    public long[] getHistoryInjectedFluids() {
+        return copyLongHistory(historyInjectedFluids);
+    }
+
+    /** 每周期注入操作次数历史（时间序）。 */
+    public int[] getHistoryInjectedOps() {
+        int[] out = new int[HISTORY];
+        for (int i = 0; i < HISTORY; i++) {
+            out[i] = historyInjectedOps[(historyIndex + i) % HISTORY];
+        }
+        return out;
+    }
+
+    private long[] copyLongHistory(long[] src) {
+        long[] out = new long[HISTORY];
+        for (int i = 0; i < HISTORY; i++) {
+            out[i] = src[(historyIndex + i) % HISTORY];
+        }
+        return out;
+    }
+
+    public long getStatLastCycleMicros() {
+        return statLastCycleMicros;
+    }
+
+    public long getStatLastInjectedItems() {
+        return statLastInjectedItems;
+    }
+
+    public long getStatLastInjectedFluids() {
+        return statLastInjectedFluids;
+    }
+
+    public long getStatTotalCycles() {
+        return statTotalCycles;
+    }
+
+    /** 各类仓室注册数量：[物品总线, 流体仓, 样板总成, 输出总成]。 */
+    public int[] getRegisteredCounts() {
+        return new int[]{itemBuses.size(), fluidHatches.size(), patternAssemblies.size(), outputAssemblies.size()};
+    }
+
+    /** 各类仓室当前待处理（脏）积压数量，顺序同 {@link #getRegisteredCounts()}。 */
+    public int[] getDirtyCounts() {
+        return new int[]{dirtyItemBuses.size(), dirtyFluidHatches.size(),
+                dirtyPatternAssemblies.size(), dirtyOutputAssemblies.size()};
+    }
+
     public void register(TileMEAsyncItemOutputBus bus) {
         itemBuses.add(bus);
     }
@@ -210,10 +317,26 @@ public enum MEAsyncOutputManager {
         if (tickCounter % interval != 0) {
             return;
         }
+        long cycleStart = System.nanoTime();
+        cycleInjectedItems = 0;
+        cycleInjectedFluids = 0;
+        cycleInjectedOps = 0;
         processItemOutputs();
         processFluidOutputs();
         processPatternAssemblyOutputs();
         processOutputAssemblyOutputs();
+        statLastCycleMicros = (System.nanoTime() - cycleStart) / 1000;
+        statLastInjectedItems = cycleInjectedItems;
+        statLastInjectedFluids = cycleInjectedFluids;
+        statTotalCycles++;
+        statTotalInjectedItems += cycleInjectedItems;
+        statTotalInjectedFluids += cycleInjectedFluids;
+        statTotalOps += cycleInjectedOps;
+        historyCycleMicros[historyIndex] = statLastCycleMicros;
+        historyInjectedItems[historyIndex] = cycleInjectedItems;
+        historyInjectedFluids[historyIndex] = cycleInjectedFluids;
+        historyInjectedOps[historyIndex] = cycleInjectedOps;
+        historyIndex = (historyIndex + 1) % HISTORY;
     }
 
     /**
@@ -349,6 +472,8 @@ public enum MEAsyncOutputManager {
             long inserted = amount - (leftover == null ? 0 : leftover.getStackSize());
             if (inserted > 0) {
                 buffer.extract(variant, inserted);
+                cycleInjectedItems += inserted;
+                cycleInjectedOps++;
             } else if (MMCEAdditionConfig.debugPatternAssembly) {
                 // 注入完全失败：网络没有对应存储空间、能量不足或安全权限拦截
                 MMCEAddition.LOGGER.debug("ME output injection rejected: {} x{} (network full / no energy / security?)",
@@ -581,6 +706,8 @@ public enum MEAsyncOutputManager {
             long inserted = amount - (leftover == null ? 0 : leftover.getStackSize());
             if (inserted > 0) {
                 buffer.extract(fluid, inserted);
+                cycleInjectedFluids += inserted;
+                cycleInjectedOps++;
             } else if (MMCEAdditionConfig.debugPatternAssembly) {
                 // 注入完全失败：网络没有流体存储、能量不足或安全权限拦截
                 MMCEAddition.LOGGER.debug("ME fluid output injection rejected: {} x{} mB (no fluid storage / no energy / security?)",

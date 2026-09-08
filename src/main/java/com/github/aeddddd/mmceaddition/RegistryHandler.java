@@ -7,6 +7,7 @@ import com.github.aeddddd.mmceaddition.block.BlockMEOutputAssembly;
 import com.github.aeddddd.mmceaddition.block.BlockMEPatternAssembly;
 import com.github.aeddddd.mmceaddition.block.BlockVirtualAssembler;
 import com.github.aeddddd.mmceaddition.block.BlockVirtualParallelHatch;
+import com.github.aeddddd.mmceaddition.item.ItemHatchAdminTool;
 import com.github.aeddddd.mmceaddition.tile.TileInputAssembly;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncFluidOutputHatch;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
@@ -82,6 +83,11 @@ public class RegistryHandler {
     public static final ItemMachineData MACHINE_DATA = new ItemMachineData();
 
     /**
+     * 仓室管理工具物品实例（手持右键打开全局仓室管理 GUI）。
+     */
+    public static final ItemHatchAdminTool HATCH_ADMIN_TOOL = new ItemHatchAdminTool();
+
+    /**
      * 方块注册事件处理器。
      * <p>
      * Forge 在加载阶段会触发 {@link RegistryEvent.Register<Block>}，所有方块必须在这个事件里注册。
@@ -148,7 +154,9 @@ public class RegistryHandler {
                 new ItemBlock(VIRTUAL_PARALLEL_HATCH)
                         .setRegistryName(VIRTUAL_PARALLEL_HATCH.getRegistryName()),
                 // 机器数据物品（仅由虚拟装配台产出，不进创造栏）
-                MACHINE_DATA
+                MACHINE_DATA,
+                // 仓室管理工具（进创造栏）
+                HATCH_ADMIN_TOOL
         );
     }
 

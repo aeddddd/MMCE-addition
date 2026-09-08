@@ -142,7 +142,8 @@ public final class VirtualParallelManager {
      * 并行度优先取装配时的快照（免疫 /mm reload 后自动命名漂移），
      * 无快照的旧数据回退到按名称实时查询迁移授权表；
      * 无升级记录时 N = 内部存储的机器数量（向后兼容）。
-     * 非并行类升级对 N 贡献 0，其效果由 {@code DynamicMachineMixin} 注入配方上下文真实生效。
+     * 非并行类升级对 N 贡献 0；其中产出类（输出乘法）modifier 不生效，
+     * 速度/能耗等其余 modifier 由 {@code DynamicMachineMixin} 每种注入一次。
      */
     public static long effectiveParallelism(DynamicMachine machine, ItemStack data) {
         java.util.Map<String, Integer> upgrades = ItemMachineData.getUpgrades(data);

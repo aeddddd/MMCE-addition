@@ -30,7 +30,8 @@ import javax.annotation.Nullable;
  * 标记组件展开为物品输入、流体输入两个独立 ProcessingComponent，
  * 绕过 MMCE 单 Tile 单组件的限制。不提供能源组件。
  */
-public class TileInputAssembly extends TileColorableMachineComponent implements MachineComponentTile {
+public class TileInputAssembly extends TileColorableMachineComponent
+        implements MachineComponentTile, com.github.aeddddd.mmceaddition.gui.IBufferViewProvider {
 
     /**
      * 物品/流体输入缓冲（Long 上限），机器经输入 handler 实时消耗。
@@ -67,6 +68,24 @@ public class TileInputAssembly extends TileColorableMachineComponent implements 
 
     public LongFluidBuffer getFluidBuffer() {
         return fluidBuffer;
+    }
+
+    @Override
+    public LongItemBuffer getViewItemBuffer() {
+        return itemBuffer;
+    }
+
+    @Override
+    public LongFluidBuffer getViewFluidBuffer() {
+        return fluidBuffer;
+    }
+
+    /**
+     * GUI 直写缓冲后重建槽位→变体映射，否则机器看不到新存入的物品。
+     */
+    @Override
+    public void onViewBufferModified() {
+        itemHandler.syncWithBuffer();
     }
 
     public long getBufferedItemAmount() {

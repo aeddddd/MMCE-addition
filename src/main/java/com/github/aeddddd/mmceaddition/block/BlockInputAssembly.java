@@ -2,6 +2,7 @@ package com.github.aeddddd.mmceaddition.block;
 
 import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.MMCEAdditionCreativeTab;
+import com.github.aeddddd.mmceaddition.gui.GuiHandler;
 import com.github.aeddddd.mmceaddition.tile.TileInputAssembly;
 import hellfirepvp.modularmachinery.common.block.BlockMachineComponent;
 import net.minecraft.block.material.Material;
@@ -16,7 +17,6 @@ import net.minecraft.util.EnumFacing;
 import net.minecraft.util.EnumHand;
 import net.minecraft.util.NonNullList;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.text.TextComponentString;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 
@@ -28,7 +28,7 @@ import javax.annotation.Nullable;
  * <p>
  * 超大容量（Long 上限）物品/流体输入缓冲，不连 AE 网络；
  * 被机器同时识别为物品输入总线与流体输入仓。
- * 右键手持物品直接存入，空手右键查看缓冲量。
+ * 右键打开缓冲视图 GUI（与 MMCE 仓室一致：任意右键均打开，见 BlockBus）。
  */
 public class BlockInputAssembly extends BlockMachineComponent {
 
@@ -42,6 +42,12 @@ public class BlockInputAssembly extends BlockMachineComponent {
         setCreativeTab(MMCEAdditionCreativeTab.TAB);
     }
 
+    /**
+     * 右键打开缓冲视图 GUI。
+     * <p>
+     * 与 MMCE 仓室（BlockBus#onBlockActivated）一致：无论手持何物、是否潜行，
+     * 右键一律打开 GUI，不做手持物品快捷存入。
+     */
     @Override
     public boolean onBlockActivated(World worldIn, BlockPos pos, IBlockState state, EntityPlayer playerIn,
                                     EnumHand hand, EnumFacing facing, float hitX, float hitY, float hitZ) {
@@ -49,21 +55,9 @@ public class BlockInputAssembly extends BlockMachineComponent {
             return true;
         }
         TileEntity te = worldIn.getTileEntity(pos);
-        if (!(te instanceof TileInputAssembly)) {
-            return true;
-        }
-        TileInputAssembly assembly = (TileInputAssembly) te;
-        ItemStack held = playerIn.getHeldItem(hand);
-        if (!held.isEmpty()) {
-            // 手持物品右键：存入物品缓冲，返还放不下的部分
-            ItemStack remainder = assembly.insertItemToBuffer(held);
-            playerIn.setHeldItem(hand, remainder);
-            playerIn.sendMessage(new TextComponentString(
-                    "Input Assembly: stored, now " + assembly.getBufferedItemAmount() + " items buffered"));
-        } else {
-            playerIn.sendMessage(new TextComponentString(
-                    "Input Assembly: " + assembly.getBufferedItemAmount() + " items, "
-                            + assembly.getBufferedFluidAmount() + " mB buffered"));
+        if (te instanceof TileInputAssembly) {
+            playerIn.openGui(MMCEAddition.instance, GuiHandler.GUI_BUFFER_VIEW,
+                    worldIn, pos.getX(), pos.getY(), pos.getZ());
         }
         return true;
     }

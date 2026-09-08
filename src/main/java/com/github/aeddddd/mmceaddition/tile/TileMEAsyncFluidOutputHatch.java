@@ -12,6 +12,7 @@ import appeng.me.helpers.AENetworkProxy;
 import appeng.me.helpers.IGridProxyable;
 import appeng.me.helpers.MachineSource;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
+import com.github.aeddddd.mmceaddition.gui.IBufferViewProvider;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
 import com.github.aeddddd.mmceaddition.util.IBufferObserver;
 import com.github.aeddddd.mmceaddition.util.LongBufferFluidHandler;
@@ -36,7 +37,7 @@ import javax.annotation.Nullable;
  * 与 {@link TileMEAsyncItemOutputBus} 对应，处理流体输出。
  */
 public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
-        implements MachineComponentTile, IActionHost, IGridProxyable, IBufferObserver {
+        implements MachineComponentTile, IActionHost, IGridProxyable, IBufferObserver, IBufferViewProvider {
 
     private final LongFluidBuffer fluidBuffer = new LongFluidBuffer(this);
     private final LongBufferFluidHandler fluidHandler = new LongBufferFluidHandler(fluidBuffer);
@@ -65,6 +66,11 @@ public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
     }
 
     public LongFluidBuffer getFluidBuffer() {
+        return fluidBuffer;
+    }
+
+    @Override
+    public LongFluidBuffer getViewFluidBuffer() {
         return fluidBuffer;
     }
 

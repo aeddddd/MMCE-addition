@@ -6,10 +6,13 @@ import com.github.aeddddd.mmceaddition.tile.TileMEAsyncFluidOutputHatch;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
 import com.github.aeddddd.mmceaddition.tile.TileMEOutputAssembly;
 import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
+import com.github.aeddddd.mmceaddition.util.FailureDetails;
 import com.github.aeddddd.mmceaddition.util.IAutoIOControllable;
 import com.github.aeddddd.mmceaddition.virtual.ItemMachineData;
 import com.github.aeddddd.mmceaddition.virtual.TileVirtualAssembler;
 import com.github.aeddddd.mmceaddition.virtual.TileVirtualParallelHatch;
+import hellfirepvp.modularmachinery.common.crafting.helper.CraftingStatus;
+import hellfirepvp.modularmachinery.common.tiles.base.TileMultiblockMachineController;
 import mcjty.theoneprobe.api.IProbeHitData;
 import mcjty.theoneprobe.api.IProbeInfo;
 import mcjty.theoneprobe.api.IProbeInfoProvider;
@@ -21,6 +24,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.world.World;
 
+import java.util.List;
 import java.util.function.Function;
 
 /**
@@ -60,6 +64,10 @@ public class TOPCompatibility {
         public void addProbeInfo(ProbeMode mode, IProbeInfo info, EntityPlayer player, World world,
                                  IBlockState state, IProbeHitData data) {
             TileEntity te = world.getTileEntity(data.getPos());
+            // MMCE 机器控制器：配方失败时展示完整错误列表（MMCE 原生只显示第一条）
+            if (te instanceof TileMultiblockMachineController) {
+                addControllerFailureDetails((TileMultiblockMachineController) te, info);
+            }
             // 自动 IO 开关状态（MMCE 物品总线/能源仓，由 Mixin 混入 IAutoIOControllable）
             if (te instanceof IAutoIOControllable) {
                 boolean auto = ((IAutoIOControllable) te).mmceaddition$isAutoIOEnabled();
@@ -163,6 +171,33 @@ public class TOPCompatibility {
                         text(info, "{*top.mmceaddition.status*}: {*top.mmceaddition.mismatched*}");
                     }
                 }
+            }
+        }
+
+        /**
+         * 控制器失败详情：状态非工作中、状态消息仍在缓存列表内（防止过期）、
+         * 且除第一条错误（MMCE 探针已显示）外还有其他错误时，逐行输出。
+         * 错误条目经 {@code {*...*}} 占位符由客户端翻译；CrT 自定义原文无对应键时原样显示。
+         */
+        private static void addControllerFailureDetails(TileMultiblockMachineController controller, IProbeInfo info) {
+            CraftingStatus status = controller.getControllerStatus();
+            if (status == null || status.isCrafting()) {
+                return;
+            }
+            List<String> details = FailureDetails.get(controller);
+            if (details.size() <= 1) {
+                return;
+            }
+            String statusMessage = status.getUnlocMessage();
+            if (!details.contains(statusMessage)) {
+                return;
+            }
+            text(info, "{*top.mmceaddition.failure_details*}");
+            for (String detail : details) {
+                if (detail.equals(statusMessage)) {
+                    continue;
+                }
+                text(info, "§7- {*" + detail + "*}");
             }
         }
 

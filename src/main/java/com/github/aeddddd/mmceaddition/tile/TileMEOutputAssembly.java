@@ -12,6 +12,7 @@ import appeng.me.helpers.IGridProxyable;
 import appeng.me.helpers.MachineSource;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.compat.NetworkEnergyCompat;
+import com.github.aeddddd.mmceaddition.gui.IBufferViewProvider;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
 import com.github.aeddddd.mmceaddition.tile.provider.AssemblyResourceComponents;
 import com.github.aeddddd.mmceaddition.util.IBufferObserver;
@@ -54,7 +55,7 @@ import javax.annotation.Nullable;
  * 绕过 MMCE 单 Tile 单组件的限制。
  */
 public class TileMEOutputAssembly extends TileColorableMachineComponent
-        implements MachineComponentTile, IActionHost, IGridProxyable, IBufferObserver {
+        implements MachineComponentTile, IActionHost, IGridProxyable, IBufferObserver, IBufferViewProvider {
 
     /**
      * 物品/流体输出缓冲（Long 上限），产出由管理器批量注入 AE。
@@ -181,6 +182,26 @@ public class TileMEOutputAssembly extends TileColorableMachineComponent
      */
     public long getNetworkEnergy() {
         return NetworkEnergyCompat.getStoredEnergy(this);
+    }
+
+    @Override
+    public LongItemBuffer getViewItemBuffer() {
+        return itemBuffer;
+    }
+
+    @Override
+    public LongFluidBuffer getViewFluidBuffer() {
+        return fluidBuffer;
+    }
+
+    @Override
+    public boolean hasViewEnergy() {
+        return true;
+    }
+
+    @Override
+    public long getViewEnergy() {
+        return getNetworkEnergy();
     }
 
     @Nonnull

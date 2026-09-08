@@ -25,13 +25,15 @@ import java.util.Objects;
  * MMCE 通过自己的 Mixin（{@code MixinContainerInterfaceTerminal}）把 MEPatternProvider 塞进去。
  * 这里用同样的方式注册样板总成：
  * <ul>
- *   <li>{@code regenList} TAIL：为每个在线样板总成创建 InvTracker 放入 diList，
- *       样板库存直接展示我们自己的 36 槽 patterns；</li>
+ *   <li>{@code regenList} 序列化循环之前（{@code diList.entrySet()} 调用处）：
+ *       为每个在线样板总成创建 InvTracker 放入 diList，样板库存直接展示我们自己的 36 槽 patterns。
+ *       不能放在 TAIL——原生方法在末尾循环里就把 diList 序列化进 NBT 并填充 byId，
+ *       TAIL 注入的条目永远不会被发给客户端（MMCE 的同款注入也在序列化循环之前）；</li>
  *   <li>{@code detectAndSendChanges} 中 MMCE 统计点之后：把样板总成的数量与缺失状态
  *       并入 MMCE 的统计字段（randomComplement$total/missing，由 MMCE 的 mixin 合入目标类），
  *       保证终端的"列表有变化"判定与全量同步逻辑对我们同样生效。</li>
  * </ul>
- * 注入点选在 MMCE 的统计注入点（isActive ordinal 0）之后、size() 重定向之前，
+ * 统计注入点选在 MMCE 的重置注入点（isActive ordinal 0）之后、size() 重定向之前，
  * 与 MMCE 的注入/重定向不冲突。
  */
 @Mixin(value = appeng.container.implementations.ContainerInterfaceTerminal.class, remap = false)
@@ -75,7 +77,11 @@ public class ContainerInterfaceTerminalMixin {
         }
     }
 
-    @Inject(method = "regenList", at = @At("TAIL"), remap = false)
+    // 必须在序列化循环（diList.entrySet()）之前放入 diList，否则条目不会被写入 NBT / byId。
+    // regenList 是 AE2 自有私有方法，生产环境名字不变，无需 SRG 兼容。
+    @Inject(method = "regenList", remap = false,
+            at = @At(value = "INVOKE", ordinal = 0, remap = false,
+                    target = "Ljava/util/Map;entrySet()Ljava/util/Set;"))
     private void mmceaddition$addPatternAssemblies(NBTTagCompound data, CallbackInfo ci) {
         if (this.grid == null || mmceaddition$initFailed) {
             return;

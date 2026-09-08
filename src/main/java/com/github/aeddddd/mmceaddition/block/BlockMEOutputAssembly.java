@@ -2,6 +2,7 @@ package com.github.aeddddd.mmceaddition.block;
 
 import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.MMCEAdditionCreativeTab;
+import com.github.aeddddd.mmceaddition.gui.GuiHandler;
 import com.github.aeddddd.mmceaddition.tile.TileMEOutputAssembly;
 import hellfirepvp.modularmachinery.common.block.BlockMachineComponent;
 import net.minecraft.block.material.Material;
@@ -16,7 +17,6 @@ import net.minecraft.util.EnumFacing;
 import net.minecraft.util.EnumHand;
 import net.minecraft.util.NonNullList;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.text.TextComponentString;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 
@@ -41,17 +41,17 @@ public class BlockMEOutputAssembly extends BlockMachineComponent {
         setCreativeTab(MMCEAdditionCreativeTab.TAB);
     }
 
+    /**
+     * 玩家右键点击方块时打开缓冲视图 GUI（滚动网格查看物品/流体缓冲与网络能源）。
+     */
     @Override
     public boolean onBlockActivated(World worldIn, BlockPos pos, IBlockState state, EntityPlayer playerIn,
                                     EnumHand hand, EnumFacing facing, float hitX, float hitY, float hitZ) {
         if (!worldIn.isRemote) {
             TileEntity te = worldIn.getTileEntity(pos);
             if (te instanceof TileMEOutputAssembly) {
-                TileMEOutputAssembly assembly = (TileMEOutputAssembly) te;
-                playerIn.sendMessage(new TextComponentString(
-                        "ME Output Assembly: " + assembly.getBufferedItemAmount() + " items, "
-                                + assembly.getBufferedFluidAmount() + " mB buffered, network energy: "
-                                + assembly.getNetworkEnergy() + " RF"));
+                playerIn.openGui(MMCEAddition.instance, GuiHandler.GUI_BUFFER_VIEW,
+                        worldIn, pos.getX(), pos.getY(), pos.getZ());
             }
         }
         return true;

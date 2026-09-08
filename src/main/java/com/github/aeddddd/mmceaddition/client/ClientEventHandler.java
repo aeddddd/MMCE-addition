@@ -4,6 +4,8 @@ import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
 import com.github.aeddddd.mmceaddition.virtual.ItemMachineData;
+import hellfirepvp.modularmachinery.common.block.BlockMachineComponent;
+import hellfirepvp.modularmachinery.common.data.Config;
 import net.minecraft.client.renderer.block.model.ModelResourceLocation;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.item.Item;
@@ -50,6 +52,32 @@ public class ClientEventHandler {
         registerItemModel(Item.getItemFromBlock(RegistryHandler.VIRTUAL_ASSEMBLER));
         registerItemModel(Item.getItemFromBlock(RegistryHandler.VIRTUAL_PARALLEL_HATCH));
         registerItemModel(RegistryHandler.MACHINE_DATA);
+        registerItemModel(RegistryHandler.HATCH_ADMIN_TOOL);
+    }
+
+    /**
+     * 方块染色注册。
+     * <p>
+     * MMCE 的成型变色机制：结构成型时控制器把机器 JSON 的 color 写入结构内所有
+     * {@code ColorableMachineTile}（casingColor，NBT 持久化 + 网络同步 + block event 刷新渲染），
+     * 客户端再经 {@code IBlockColor} 对模型 tintindex=1 的灰色外壳面做颜色乘算。
+     * <p>
+     * MMCE 只为自家方块注册颜色 handler，本模组的方块（均继承 BlockMachineComponent，
+     * 已实现 getColorMultiplier）需要在此自行注册，否则永远显示未染色的默认外壳。
+     */
+    @SubscribeEvent
+    public static void onBlockColors(ColorHandlerEvent.Block event) {
+        for (BlockMachineComponent block : new BlockMachineComponent[]{
+                RegistryHandler.ME_ASYNC_ITEM_OUTPUT_BUS,
+                RegistryHandler.ME_ASYNC_FLUID_OUTPUT_HATCH,
+                RegistryHandler.ME_PATTERN_ASSEMBLY,
+                RegistryHandler.ME_OUTPUT_ASSEMBLY,
+                RegistryHandler.INPUT_ASSEMBLY,
+                RegistryHandler.VIRTUAL_ASSEMBLER,
+                RegistryHandler.VIRTUAL_PARALLEL_HATCH
+        }) {
+            event.getBlockColors().registerBlockColorHandler(block::getColorMultiplier, block);
+        }
     }
 
     /**
@@ -57,6 +85,9 @@ public class ClientEventHandler {
      * <p>
      * 机器数据的第二层（白色电路走线贴图）按机器注册名 hash 动态着色，
      * 同机器同色、不同机器可区分，无需为每种机器单独绘制贴图。
+     * <p>
+     * 仓室方块的 ItemBlock 与 MMCE 的 ItemBlockMachineComponent 行为一致：
+     * 背包/JEI/手持中恒显示默认机器颜色（Config.machineColor）。
      */
     @SubscribeEvent
     public static void onItemColors(ColorHandlerEvent.Item event) {
@@ -66,6 +97,16 @@ public class ClientEventHandler {
             }
             return 0xFFFFFFFF;
         }, RegistryHandler.MACHINE_DATA);
+
+        // 仓室方块 ItemBlock：与 MMCE ItemBlockMachineComponent 一致，物品形态恒显示默认机器颜色
+        event.getItemColors().registerItemColorHandler((stack, tintIndex) -> Config.machineColor,
+                Item.getItemFromBlock(RegistryHandler.ME_ASYNC_ITEM_OUTPUT_BUS),
+                Item.getItemFromBlock(RegistryHandler.ME_ASYNC_FLUID_OUTPUT_HATCH),
+                Item.getItemFromBlock(RegistryHandler.ME_PATTERN_ASSEMBLY),
+                Item.getItemFromBlock(RegistryHandler.ME_OUTPUT_ASSEMBLY),
+                Item.getItemFromBlock(RegistryHandler.INPUT_ASSEMBLY),
+                Item.getItemFromBlock(RegistryHandler.VIRTUAL_ASSEMBLER),
+                Item.getItemFromBlock(RegistryHandler.VIRTUAL_PARALLEL_HATCH));
     }
 
     /**
@@ -122,6 +163,8 @@ public class ClientEventHandler {
             addCompatSection(tooltip, MMCEAdditionConfig.enableVirtualHatchCompat,
                     "item_input_bus", "item_output_bus", "fluid_input_hatch", "fluid_output_hatch",
                     "energy_input_hatch", "energy_output_hatch", "pattern_provider");
+        } else if (item == RegistryHandler.HATCH_ADMIN_TOOL) {
+            addFunctionLines(tooltip, "tooltip.mmceaddition.hatch_admin_tool");
         }
     }
 

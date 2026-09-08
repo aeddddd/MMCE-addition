@@ -8,21 +8,29 @@
     "ContainerInterfaceTerminalMixin",
     "CraftingCPUClusterMixin",
     "DynamicMachineMixin",
+    "FactoryRecipeSearchTaskMixin",
+    "FailureDetailsControllerMixin",
     "MachineRegistryMixin",
     "MixinAspectProviderCopy",
     "ParallelismControllerMixin",
     "RecipeCraftingContextMixin",
     "RecipeCraftingContextSumMixin",
+    "RecipeSearchTaskMixin",
+    "RecipeThreadMixin",
     "RequirementFluidMixin",
     "RequirementIngredientArrayMixin",
     "RequirementItemMixin",
     "TileEnergyHatchMixin",
     "TileEnergyOutputHatchMixin",
+    "TileEntityRestrictedTickMixin",
     "TileItemBusMixin",
     "TileItemInputBusMixin",
-    "TileItemOutputBusMixin"
+    "TileItemOutputBusMixin",
+    "TileMachineControllerMixin"
   ],
-  "client": [],
+  "client": [
+    "client.ControllerGUIFailureDetailsMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

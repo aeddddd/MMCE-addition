@@ -57,4 +57,13 @@ public class ClientProxy extends CommonProxy {
     public void postInit(FMLPostInitializationEvent event) {
         super.postInit(event);
     }
+
+    /**
+     * 打开仓室管理工具 GUI（纯客户端界面，数据经网络包拉取）。
+     */
+    @Override
+    public void openHatchAdminGui() {
+        net.minecraft.client.Minecraft.getMinecraft().displayGuiScreen(
+                new com.github.aeddddd.mmceaddition.gui.GuiHatchAdmin());
+    }
 }

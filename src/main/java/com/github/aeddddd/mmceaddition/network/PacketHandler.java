@@ -30,5 +30,19 @@ public class PacketHandler {
                 PktVirtualAssemblerScroll.class, id++, Side.SERVER);
         INSTANCE.registerMessage(PktVirtualAssemblerCounts.Handler.class,
                 PktVirtualAssemblerCounts.class, id++, Side.CLIENT);
+        INSTANCE.registerMessage(PktBufferViewScroll.Handler.class,
+                PktBufferViewScroll.class, id++, Side.SERVER);
+        INSTANCE.registerMessage(PktBufferViewClick.Handler.class,
+                PktBufferViewClick.class, id++, Side.SERVER);
+        INSTANCE.registerMessage(PktBufferViewSync.Handler.class,
+                PktBufferViewSync.class, id++, Side.CLIENT);
+        INSTANCE.registerMessage(PktHatchAdminRequest.Handler.class,
+                PktHatchAdminRequest.class, id++, Side.SERVER);
+        INSTANCE.registerMessage(PktHatchAdminAction.Handler.class,
+                PktHatchAdminAction.class, id++, Side.SERVER);
+        INSTANCE.registerMessage(PktHatchProfilerToggle.Handler.class,
+                PktHatchProfilerToggle.class, id++, Side.SERVER);
+        INSTANCE.registerMessage(PktHatchAdminSync.Handler.class,
+                PktHatchAdminSync.class, id++, Side.CLIENT);
     }
 }

@@ -272,6 +272,22 @@ public class MMCEAdditionConfig {
     };
 
     /**
+     * 外部 tick 加速器兼容模式。
+     * <p>
+     * MMCE 的 TileEntity 基类（TileEntityRestrictedTick）会以世界 tick 计数去重，
+     * 同一 tick 内的重复 update() 调用会被丢弃，导致 Quantum Things 时间之瓶
+     * （EntityTimeAccelerator）等加速器无法加速机器。
+     * <p>
+     * time_bottle_only：仅 Quantum Things 时间之瓶可加速（检测目标位置的
+     * EntityTimeAccelerator 实体，默认）；all：所有同原理加速器均可加速；
+     * off：关闭兼容，恢复 MMCE 原版限制。
+     */
+    @Config.Name("tick_acceleration_mode")
+    @Config.Comment("外部 tick 加速器兼容模式：time_bottle_only（仅 Quantum Things 时间之瓶，默认）/ all（所有同原理加速器）/ off（关闭）")
+    @Config.LangKey("config.mmceaddition.tick_acceleration_mode")
+    public static String tickAccelerationMode = "time_bottle_only";
+
+    /**
      * 是否输出配方输出加和调试日志。
      */
     @Config.Name("debug_recipe_summation")

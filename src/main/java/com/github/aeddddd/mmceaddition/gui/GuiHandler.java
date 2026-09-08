@@ -19,6 +19,8 @@ public class GuiHandler implements IGuiHandler {
     public static final int GUI_ME_PATTERN_ASSEMBLY = 0;
     public static final int GUI_VIRTUAL_ASSEMBLER = 1;
     public static final int GUI_VIRTUAL_PARALLEL_HATCH = 2;
+    /** 缓冲视图（异步输出总线/流体仓、输出总成、输入总成共用）。 */
+    public static final int GUI_BUFFER_VIEW = 3;
 
     @Nullable
     @Override
@@ -35,6 +37,10 @@ public class GuiHandler implements IGuiHandler {
         } else if (id == GUI_VIRTUAL_PARALLEL_HATCH) {
             if (tile instanceof TileVirtualParallelHatch) {
                 return new ContainerVirtualParallelHatch((TileVirtualParallelHatch) tile, player);
+            }
+        } else if (id == GUI_BUFFER_VIEW) {
+            if (tile instanceof IBufferViewProvider) {
+                return new ContainerBufferView(tile, player);
             }
         }
         return null;
@@ -55,6 +61,10 @@ public class GuiHandler implements IGuiHandler {
         } else if (id == GUI_VIRTUAL_PARALLEL_HATCH) {
             if (tile instanceof TileVirtualParallelHatch) {
                 return new GuiVirtualParallelHatch((TileVirtualParallelHatch) tile, new ContainerVirtualParallelHatch((TileVirtualParallelHatch) tile, player));
+            }
+        } else if (id == GUI_BUFFER_VIEW) {
+            if (tile instanceof IBufferViewProvider) {
+                return new GuiBufferView(tile, new ContainerBufferView(tile, player));
             }
         }
         return null;

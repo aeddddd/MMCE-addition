@@ -7,6 +7,7 @@ import hellfirepvp.modularmachinery.common.crafting.ActiveMachineRecipe;
 import hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent;
 import hellfirepvp.modularmachinery.common.crafting.helper.RecipeCraftingContext;
 import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
+import hellfirepvp.modularmachinery.common.machine.IOType;
 import hellfirepvp.modularmachinery.common.modifier.AbstractModifierReplacement;
 import hellfirepvp.modularmachinery.common.modifier.RecipeModifier;
 import hellfirepvp.modularmachinery.common.modifier.SingleBlockModifierReplacement;
@@ -28,8 +29,9 @@ import java.util.WeakHashMap;
  * Mixin：把虚拟并行仓中机器数据记录的非并行类升级 modifier 真实注入配方上下文。
  * <p>
  * 机器数据在装配时按"替换式"记录升级（modifier 名 → 数量）。
- * 并行类升级已由迁移授权折算进 x(1+N) 的 N；其余升级（速度/能耗等）
- * 在这里按数量逐次应用到上下文——与真实结构中每安装一个元件应用一次的语义一致。
+ * 并行类升级已由迁移授权折算进 x(1+N) 的 N；产出类升级（物品/流体输出乘法）
+ * 不注入——与并行放大相乘会指数膨胀；其余升级（速度/能耗等）每种只应用一次，
+ * 记录数量可经合并无限累积，按数量连乘同样会指数膨胀。
  * <p>
  * 注入点选择 {@code createContext} 的 RETURN：此时上下文已由 MMCE 完成
  * 结构 modifier 的常规应用，我们只需追加数据记录的部分。
@@ -95,15 +97,15 @@ public abstract class DynamicMachineMixin {
             if (modifiers == null || modifiers.isEmpty()) {
                 continue;
             }
-            // 每个升级应用一次，与真实结构逐个安装元件的语义一致
-            for (int i = 0; i < entry.getValue(); i++) {
-                context.addModifier(modifiers);
-            }
+            // 每种升级只应用一次：数量已用于并行类折算；产出类 modifier 建索引时已剔除
+            context.addModifier(modifiers);
         }
     }
 
     /**
      * 建立 modifier 名 → modifier 列表的索引（含单方块与多方块元件）。
+     * 产出类 modifier（物品/流体输出乘法、放大数量）在建索引时剔除，
+     * 这类效果与并行放大相乘会指数膨胀，虚拟升级中不生效。
      */
     private static Map<String, List<RecipeModifier>> modifierIndex(DynamicMachine machine) {
         synchronized (MODIFIER_INDEX) {
@@ -115,17 +117,36 @@ public abstract class DynamicMachineMixin {
             for (List<SingleBlockModifierReplacement> list : machine.getModifiers().values()) {
                 for (SingleBlockModifierReplacement rep : list) {
                     if (rep != null && rep.getModifiers() != null) {
-                        index.putIfAbsent(rep.getModifierName(), rep.getModifiers());
+                        index.putIfAbsent(rep.getModifierName(), stripOutputMultipliers(rep.getModifiers()));
                     }
                 }
             }
             for (AbstractModifierReplacement rep : machine.getMultiBlockModifiers()) {
                 if (rep != null && rep.getModifiers() != null) {
-                    index.putIfAbsent(rep.getModifierName(), rep.getModifiers());
+                    index.putIfAbsent(rep.getModifierName(), stripOutputMultipliers(rep.getModifiers()));
                 }
             }
             MODIFIER_INDEX.put(machine, Collections.unmodifiableMap(index));
             return index;
         }
+    }
+
+    /** 剔除产出类 modifier：OUTPUT 方向的非概率乘法放大。 */
+    private static List<RecipeModifier> stripOutputMultipliers(List<RecipeModifier> modifiers) {
+        List<RecipeModifier> filtered = null;
+        for (int i = 0; i < modifiers.size(); i++) {
+            RecipeModifier m = modifiers.get(i);
+            boolean outputMultiplier = m != null
+                    && m.getIOTarget() == IOType.OUTPUT
+                    && m.getOperation() == RecipeModifier.OPERATION_MULTIPLY
+                    && !m.affectsChance()
+                    && m.getModifier() > 1.0f;
+            if (outputMultiplier && filtered == null) {
+                filtered = new java.util.ArrayList<>(modifiers.subList(0, i));
+            } else if (!outputMultiplier && filtered != null) {
+                filtered.add(m);
+            }
+        }
+        return filtered != null ? Collections.unmodifiableList(filtered) : modifiers;
     }
 }

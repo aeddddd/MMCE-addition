@@ -4,6 +4,7 @@ import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.command.CommandMMCEAddition;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
+import com.github.aeddddd.mmceaddition.manager.ServerTickMonitor;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.config.ConfigManager;
 import net.minecraftforge.fml.common.Loader;
@@ -45,6 +46,8 @@ public class CommonProxy {
         // 注册后，带有 @SubscribeEvent 注解的方法就能收到对应事件。
         MinecraftForge.EVENT_BUS.register(new RegistryHandler());
         MinecraftForge.EVENT_BUS.register(MEAsyncOutputManager.INSTANCE);
+        // 服务器整体 tick 监控（仓室管理工具性能页的总体基准线）
+        MinecraftForge.EVENT_BUS.register(ServerTickMonitor.INSTANCE);
     }
 
     /**
@@ -83,5 +86,13 @@ public class CommonProxy {
         // 注册自定义管理命令。
         // FMLServerStartingEvent 只在服务端可用，所以命令注册放在 CommonProxy 而不是 ClientProxy。
         event.registerServerCommand(new CommandMMCEAddition());
+    }
+
+    /**
+     * 打开仓室管理工具 GUI。
+     * <p>
+     * 服务端无此概念，空实现；{@link ClientProxy} 中打开纯客户端界面。
+     */
+    public void openHatchAdminGui() {
     }
 }

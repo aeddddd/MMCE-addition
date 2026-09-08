@@ -2,6 +2,7 @@ package com.github.aeddddd.mmceaddition.block;
 
 import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.MMCEAdditionCreativeTab;
+import com.github.aeddddd.mmceaddition.gui.GuiHandler;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
 import hellfirepvp.modularmachinery.common.block.BlockMachineComponent;
 import net.minecraft.block.material.Material;
@@ -16,7 +17,6 @@ import net.minecraft.util.EnumFacing;
 import net.minecraft.util.EnumHand;
 import net.minecraft.util.NonNullList;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.text.TextComponentString;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 
@@ -55,10 +55,7 @@ public class BlockMEAsyncItemOutputBus extends BlockMachineComponent {
     }
 
     /**
-     * 玩家右键点击方块时触发。
-     * <p>
-     * 这里仅在服务端打印当前缓冲区内的物品数量，用于调试。
-     * 后续如果要加 GUI，可以在这里打开 GUI。
+     * 玩家右键点击方块时打开缓冲视图 GUI（滚动网格查看/取出缓冲内容）。
      *
      * @return true 表示已处理交互，不会继续触发其他行为
      */
@@ -68,9 +65,8 @@ public class BlockMEAsyncItemOutputBus extends BlockMachineComponent {
         if (!worldIn.isRemote) {
             TileEntity te = worldIn.getTileEntity(pos);
             if (te instanceof TileMEAsyncItemOutputBus) {
-                TileMEAsyncItemOutputBus bus = (TileMEAsyncItemOutputBus) te;
-                playerIn.sendMessage(new TextComponentString(
-                        "ME Async Item Output Bus: " + bus.getBufferedAmount() + " items buffered"));
+                playerIn.openGui(MMCEAddition.instance, GuiHandler.GUI_BUFFER_VIEW,
+                        worldIn, pos.getX(), pos.getY(), pos.getZ());
             }
         }
         return true;
