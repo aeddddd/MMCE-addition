@@ -258,8 +258,8 @@ public class MMCEAdditionConfig {
     @Config.Comment("手持列表物品右键 MMCE 物品总线/能源仓可切换其自动 IO。格式 modid:name 或 modid:name:meta。默认包含各类扳手")
     @Config.LangKey("config.mmceaddition.auto_io_toggle_items")
     public static String[] autoIOToggleItems = new String[]{
-            "appliedenergistics2:certus_quartz_wrench",
-            "appliedenergistics2:nether_quartz_wrench",
+            "ae2:certus_quartz_wrench",
+            "ae2:nether_quartz_wrench",
             "thermalfoundation:wrench",
             "enderio:item_yeta_wrench",
             "mekanism:configurator",

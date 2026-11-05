@@ -1,0 +1,24 @@
+plugins { id 'java-library' }
+group = 'local.ae2addons'
+version = '1.0.0'
+base.archivesName = 'Cleanroom-0.4.0-Server-Compatibility'
+java { toolchain.languageVersion = JavaLanguageVersion.of(25); withSourcesJar() }
+repositories { mavenCentral(); maven { url = 'https://maven.cleanroommc.com' } }
+dependencies {
+    compileOnly('com.cleanroommc:cleanroom:0.4.0:universal@jar') { transitive = false }
+    compileOnly('top.outlands:foundation:0.18.4') { transitive = false }
+    compileOnly 'org.ow2.asm:asm-tree:9.9.1'
+    compileOnly 'org.apache.logging.log4j:log4j-api:2.25.3'
+    testImplementation 'org.junit.jupiter:junit-jupiter:6.0.3'
+    testImplementation 'org.ow2.asm:asm-tree:9.9.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.0.3'
+    testRuntimeOnly 'top.outlands:foundation:0.18.4'
+}
+test { useJUnitPlatform() }
+configurations { testCompileOnly.extendsFrom compileOnly }
+jar {
+    manifest { attributes 'FMLCorePlugin': 'local.ae2addons.cleanroom040.ServerCompatibilityPlugin',
+        'FMLCorePluginContainsFMLMod': 'false', 'ModType': 'CRL',
+        'Implementation-Version': project.version }
+    from 'README.md'
+}

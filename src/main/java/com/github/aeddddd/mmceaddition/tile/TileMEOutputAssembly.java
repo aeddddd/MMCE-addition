@@ -1,15 +1,5 @@
 package com.github.aeddddd.mmceaddition.tile;
 
-import appeng.api.networking.GridFlags;
-import appeng.api.networking.IGridNode;
-import appeng.api.networking.security.IActionHost;
-import appeng.api.networking.security.IActionSource;
-import appeng.api.util.AECableType;
-import appeng.api.util.AEPartLocation;
-import appeng.api.util.DimensionalCoord;
-import appeng.me.helpers.AENetworkProxy;
-import appeng.me.helpers.IGridProxyable;
-import appeng.me.helpers.MachineSource;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.compat.NetworkEnergyCompat;
 import com.github.aeddddd.mmceaddition.gui.IBufferViewProvider;
@@ -54,8 +44,8 @@ import javax.annotation.Nullable;
  * 标记组件展开为物品输出、流体输出、能源输入、能源输出四个独立 ProcessingComponent，
  * 绕过 MMCE 单 Tile 单组件的限制。
  */
-public class TileMEOutputAssembly extends TileColorableMachineComponent
-        implements MachineComponentTile, IActionHost, IGridProxyable, IBufferObserver, IBufferViewProvider {
+public class TileMEOutputAssembly extends TileMENetworkComponent
+        implements MachineComponentTile, IBufferObserver, IBufferViewProvider {
 
     /**
      * 物品/流体输出缓冲（Long 上限），产出由管理器批量注入 AE。
@@ -71,16 +61,12 @@ public class TileMEOutputAssembly extends TileColorableMachineComponent
      */
     private final NetworkEnergyHandler energyHandler = new NetworkEnergyHandler();
 
-    private final AENetworkProxy proxy;
-    private final IActionSource source;
 
     private boolean registered = false;
 
-    public TileMEOutputAssembly() {
-        this.proxy = new AENetworkProxy(this, "aeProxy", new ItemStack(RegistryHandler.ME_OUTPUT_ASSEMBLY), true);
-        this.proxy.setIdlePowerUsage(1.0);
-        this.proxy.setFlags(GridFlags.REQUIRE_CHANNEL);
-        this.source = new MachineSource(this);
+    @Override
+    public ItemStack getVisualItemStack() {
+        return new ItemStack(RegistryHandler.ME_OUTPUT_ASSEMBLY);
     }
 
     /**
@@ -204,58 +190,10 @@ public class TileMEOutputAssembly extends TileColorableMachineComponent
         return getNetworkEnergy();
     }
 
-    @Nonnull
-    @Override
-    public AENetworkProxy getProxy() {
-        return proxy;
-    }
-
-    @Nullable
-    @Override
-    public IGridNode getGridNode(@Nonnull AEPartLocation dir) {
-        return proxy.getNode();
-    }
-
-    @Nonnull
-    @Override
-    public AECableType getCableConnectionType(@Nonnull AEPartLocation dir) {
-        return AECableType.SMART;
-    }
-
-    @Nonnull
-    @Override
-    public DimensionalCoord getLocation() {
-        return new DimensionalCoord(this);
-    }
-
-    @Override
-    public void gridChanged() {
-    }
-
-    @Nonnull
-    @Override
-    public IGridNode getActionableNode() {
-        return proxy.getNode();
-    }
-
-    @Override
-    public void securityBreak() {
-        if (world != null && pos != null) {
-            world.setBlockToAir(pos);
-        }
-    }
-
-    @Override
-    public void validate() {
-        super.validate();
-        proxy.validate();
-    }
-
     @Override
     public void onLoad() {
         super.onLoad();
         if (!world.isRemote) {
-            proxy.onReady();
             if (!registered) {
                 MEAsyncOutputManager.INSTANCE.register(this);
                 registered = true;
@@ -271,14 +209,12 @@ public class TileMEOutputAssembly extends TileColorableMachineComponent
     @Override
     public void invalidate() {
         super.invalidate();
-        proxy.invalidate();
         unregisterManager();
     }
 
     @Override
     public void onChunkUnload() {
         super.onChunkUnload();
-        proxy.onChunkUnload();
         unregisterManager();
     }
 
@@ -289,9 +225,6 @@ public class TileMEOutputAssembly extends TileColorableMachineComponent
         }
     }
 
-    public IActionSource getSource() {
-        return source;
-    }
 
     @Override
     public boolean hasCapability(@Nonnull Capability<?> capability, @Nullable EnumFacing facing) {
@@ -315,11 +248,6 @@ public class TileMEOutputAssembly extends TileColorableMachineComponent
     @Override
     public void readCustomNBT(NBTTagCompound compound) {
         super.readCustomNBT(compound);
-        try {
-            proxy.readFromNBT(compound);
-        } catch (IllegalStateException e) {
-            // 忽略非法状态异常，通常发生在代理尚未初始化时
-        }
         if (compound.hasKey("ItemBuffer")) {
             itemBuffer.readFromNBT(compound.getCompoundTag("ItemBuffer"));
         }
@@ -331,7 +259,6 @@ public class TileMEOutputAssembly extends TileColorableMachineComponent
     @Override
     public void writeCustomNBT(NBTTagCompound compound) {
         super.writeCustomNBT(compound);
-        proxy.writeToNBT(compound);
         NBTTagCompound itemTag = new NBTTagCompound();
         itemBuffer.writeToNBT(itemTag);
         compound.setTag("ItemBuffer", itemTag);

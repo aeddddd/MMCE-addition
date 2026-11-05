@@ -56,12 +56,25 @@ public class LongFluidBuffer {
 
         if (doFill) {
             storage.put(fluid, next);
+            if (accepted > 0 && observer != null) observer.onBufferChanged();
             if (wasEmpty && !storage.isEmpty() && observer != null) {
                 observer.onBufferNonEmpty();
             }
         }
 
         return (int) accepted;
+    }
+
+    /** Inserts an AE2S mB quantity without narrowing it to an int. */
+    public synchronized long fillLong(Fluid fluid, long amount) {
+        if (amount <= 0) return 0;
+        long current = storage.getOrDefault(fluid, 0L);
+        long accepted = Math.min(amount, Long.MAX_VALUE - current);
+        boolean wasEmpty = storage.isEmpty();
+        if (accepted > 0) storage.put(fluid, current + accepted);
+        if (wasEmpty && !storage.isEmpty() && observer != null) observer.onBufferNonEmpty();
+        if (accepted > 0 && observer != null) observer.onBufferChanged();
+        return accepted;
     }
 
     /**
@@ -82,6 +95,7 @@ public class LongFluidBuffer {
         } else {
             storage.put(fluid, next);
         }
+        if (observer != null) observer.onBufferChanged();
         return toExtract;
     }
 

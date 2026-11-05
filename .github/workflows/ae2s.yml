@@ -1,0 +1,20 @@
+name: Native AE2S build
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - name: Unit regressions and production jars
+        run: ./gradlew test reobfJar reobfRuntimeHarnessJar --console=plain
+      - name: Exact-baseline server prerequisite tests
+        run: ./gradlew -p verification/server-compat-source test jar --console=plain

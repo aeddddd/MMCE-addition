@@ -1,6 +1,6 @@
 package com.github.aeddddd.mmceaddition.mixin;
 
-import appeng.api.networking.security.IActionHost;
+import ae2.api.networking.security.IActionHost;
 import com.github.aeddddd.mmceaddition.compat.NetworkResourceCompat;
 import com.github.aeddddd.mmceaddition.tile.provider.INetworkAspectJar;
 import kport.modularmagic.common.crafting.helper.AspectProviderCopy;

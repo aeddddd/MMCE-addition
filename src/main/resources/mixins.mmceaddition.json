@@ -2,11 +2,9 @@
   "package": "com.github.aeddddd.mmceaddition.mixin",
   "plugin": "com.github.aeddddd.mmceaddition.mixin.MMCEAdditionMixinPlugin",
   "minVersion": "0.7",
-  "compatibilityLevel": "JAVA_8",
+  "compatibilityLevel": "JAVA_25",
   "mixins": [
     "BlockInformationMixin",
-    "ContainerInterfaceTerminalMixin",
-    "CraftingCPUClusterMixin",
     "DynamicMachineMixin",
     "FactoryRecipeSearchTaskMixin",
     "FailureDetailsControllerMixin",

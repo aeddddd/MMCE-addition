@@ -76,7 +76,7 @@ public class TOPCompatibility {
             }
             if (te instanceof TileMEAsyncItemOutputBus) {
                 TileMEAsyncItemOutputBus bus = (TileMEAsyncItemOutputBus) te;
-                addNetworkLine(info, bus.getProxy().isActive());
+                addNetworkLine(info, bus.getMainNode().isActive());
                 long total = bus.getBufferedAmount();
                 if (total > 0) {
                     addBufferLine(info, "top.mmceaddition.buffered_items",
@@ -84,7 +84,7 @@ public class TOPCompatibility {
                 }
             } else if (te instanceof TileMEAsyncFluidOutputHatch) {
                 TileMEAsyncFluidOutputHatch hatch = (TileMEAsyncFluidOutputHatch) te;
-                addNetworkLine(info, hatch.getProxy().isActive());
+                addNetworkLine(info, hatch.getMainNode().isActive());
                 long total = hatch.getBufferedAmount();
                 if (total > 0) {
                     addBufferLine(info, "top.mmceaddition.buffered_fluids",
@@ -107,7 +107,7 @@ public class TOPCompatibility {
                 }
             } else if (te instanceof TileMEOutputAssembly) {
                 TileMEOutputAssembly assembly = (TileMEOutputAssembly) te;
-                addNetworkLine(info, assembly.getProxy().isActive());
+                addNetworkLine(info, assembly.getMainNode().isActive());
                 long items = assembly.getBufferedItemAmount();
                 if (items > 0) {
                     addBufferLine(info, "top.mmceaddition.buffered_items",

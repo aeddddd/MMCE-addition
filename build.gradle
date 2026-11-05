@@ -1,121 +1,74 @@
-// ============================================================
-// ForgeGradle 2.3 构建脚本（适用于 Minecraft 1.12.2）
-// ============================================================
-// buildscript 块定义构建脚本本身的依赖，包括 ForgeGradle 插件。
-buildscript {
-    repositories {
-        // Forge 官方 Maven 仓库，提供 ForgeGradle。
-        maven { url = 'https://maven.minecraftforge.net' }
-        // SpongePowered Maven 仓库，提供 Mixin 相关依赖。
-        maven { url = 'https://repo.spongepowered.org/maven' }
-        mavenCentral()
-    }
-    dependencies {
-        // ForgeGradle 2.3-SNAPSHOT 是 1.12.2 常用的构建插件版本。
-        classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
-    }
+plugins {
+    id 'java-library'
+    id 'com.cleanroommc.cleanroomgradle'
 }
-
-// 应用 ForgeGradle 插件。
-apply plugin: 'net.minecraftforge.gradle.forge'
-
-// 模组版本、Maven 坐标、构建产物名。
-version = '1.4.4'
+version = '1.4.4-ae2s.1'
 group = 'com.github.aeddddd'
-archivesBaseName = 'MMCE-addition'
-
-// Java 版本设置。
-sourceCompatibility = targetCompatibility = '1.8'
-compileJava {
-    sourceCompatibility = targetCompatibility = '1.8'
-    // 强制使用 UTF-8 编码，避免中文注释/语言文件在 Windows 下出现乱码。
-    options.encoding = 'UTF-8'
+base.archivesName = 'MMCE-addition'
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withSourcesJar()
 }
-compileTestJava {
-    options.encoding = 'UTF-8'
-}
-tasks.withType(JavaCompile) {
-    options.encoding = 'UTF-8'
-}
-
-// ForgeGradle 配置块。
-minecraft {
-    // Forge 版本：1.12.2-14.23.5.2847 是 1.12.2 的推荐版本之一。
-    version = '1.12.2-14.23.5.2847'
-    // MCP 映射表版本，stable_39 是 1.12.2 的常用稳定映射。
-    mappings = 'stable_39'
-    // 运行目录，./gradlew runClient 会在这里生成客户端运行环境。
-    runDir = 'run'
-    // 不生成源码 jar，节省构建时间。
-    makeObfSourceJar = false
-}
-
-// 仓库配置。
 repositories {
-    // flatDir 允许直接把本地 JAR 放在 libs/ 目录下作为依赖。
-    flatDir {
-        dirs 'libs'
-    }
     mavenCentral()
-    maven { url = 'https://repo.spongepowered.org/maven' }
-    // Modrinth Maven：提供 The One Probe（TOP 兼容层的编译期依赖）。
-    maven { url = 'https://api.modrinth.com/maven' }
+    maven { url = 'https://maven.cleanroommc.com' }
+    maven { url = 'https://cursemaven.com'; content { includeGroup 'curse.maven' } }
+    maven { url = 'https://api.modrinth.com/maven'; content { includeGroup 'maven.modrinth' } }
+    maven { url = 'https://maven.blamejared.com' }
 }
-
+apply from: 'gradle/ae2-supergiant.gradle'
+// AppliedCompatibility supplies MMCE's existing legacy ABI. The addon's own
+// network nodes, transfers, patterns and terminal integration use ae2.* directly.
+apply from: 'gradle/appcompat-api.gradle'
 dependencies {
-    // MMCE 与 AE2UEL 本地依赖，使用 deobfCompile 反混淆。
-    // deobfCompile 是 ForgeGradle 提供的配置，会把 JAR 反混淆为开发环境可读的名称。
-    deobfCompile name: 'ModularMachinery-CE-2.3.2'
-    deobfCompile name: 'ae2-uel-v0.56.7'
-    // AE2 Fluid Crafting：仅编译期引用其流体假物品 API（FakeFluids/FakeItemRegister），
-    // 运行时为可选软依赖，代码中通过 Loader.isModLoaded("ae2fc") 保护。
-    deobfCompile name: 'ae2fc-2.7.10-unofficial'
-    // GeckoLib：MMCE-CE 的传递依赖（TileMultiblockMachineController 实现了 IAnimatable），
-    // 编译期需要它来解析控制器类层次。
-    deobfCompile name: 'geckolib-forge-1.12.2-3.0.30'
-    // HadEnoughItems（JEI 的 1.12.2 分支）：虚拟装配台配方列表（@JEIPlugin 仅在 HEI 存在时加载，天然软依赖）
-    deobfCompile name: 'HadEnoughItems_1.12.2-4.29.15'
-    // The One Probe：仓室状态信息展示（Eyw0UxEx = theoneprobe 1.12-1.4.28，运行时为软依赖，
-    // 通过 IMC 注册 Provider，未安装时回调类不会被加载）
-    deobfCompile 'maven.modrinth:Eyw0UxEx:VYorc4gX'
-
-    // 可选集成的编译期依赖：Thaumcraft / Botania / Astral Sorcery
-    // （网络资源 provider 继承其 Tile 基类；运行时为软依赖，经 Loader.isModLoaded 条件加载，
-    //   与 AE2Enhanced 侧 compileOnly files(...) 的处理方式一致）
-    compileOnly files('../AE2Enhanced/libs/Thaumcraft-1.12.2-6.1.BETA26.jar')
-    compileOnly files('../AE2Enhanced/libs/Botania r1.10-364.4.jar')
-    compileOnly files('../AE2Enhanced/libs-unused/astralsorcery-1.12.2-1.10.27.jar')
-
-    // Mixin 编译期依赖（运行时由 MixinBooter 提供）。
-    // compileOnly 表示编译时需要，但不会打包进最终产物。
-    compileOnly 'org.spongepowered:mixin:0.8.7'
-    // annotationProcessor 让 Mixin 注解处理器在编译时处理 @Mixin 注解。
-    annotationProcessor 'org.spongepowered:mixin:0.8.7:processor'
-
-    // 测试框架：JUnit 5。
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.0'
-    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.10.0'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.0'
+    implementation cleanroom.userdev(cleanroom_version)
+    implementation(deobf('curse.maven:modularmachinery-community-edition-817377:7372951')) { transitive = false }
+    compileOnly(deobf('curse.maven:geckolib-388172:4020277')) { transitive = false }
+    compileOnly(deobf('curse.maven:the-one-probe-245211:2667280')) { transitive = false }
+    compileOnly(deobf('curse.maven:thaumcraft-223628:2629023')) { transitive = false }
+    compileOnly(deobf('curse.maven:botania-225643:3330934')) { transitive = false }
+    compileOnly(deobf('curse.maven:astral-sorcery-241721:3044416')) { transitive = false }
+    compileOnly 'org.jetbrains:annotations:26.0.2'
+    compileOnly 'zone.rong:mixinbooter:10.6'
+    implementation 'it.unimi.dsi:fastutil:8.5.15'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.0'
 }
-
-test {
-    useJUnitPlatform()
+configurations {
+    testCompileOnly.extendsFrom compileOnly
+    testRuntimeOnly.extendsFrom compileOnly
 }
-
-// 处理资源文件。
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xmaxerrs', '200']
+}
+tasks.withType(net.minecraftforge.renamer.gradle.RenameJar).configureEach {
+    javaLauncher.set(javaToolchains.launcherFor { spec -> spec.languageVersion.set(JavaLanguageVersion.of(25)) })
+}
+tasks.withType(Test).configureEach { useJUnitPlatform() }
 processResources {
-    // 定义输入属性，这样当 version 变化时 Gradle 会自动重新处理资源。
     inputs.property 'version', project.version
-    inputs.property 'mcversion', project.minecraft.version
-
-    // 对 mcmod.info 进行变量替换，把 ${version} 和 ${mcversion} 替换为实际值。
-    from(sourceSets.main.resources.srcDirs) {
-        include 'mcmod.info'
-        expand 'version': project.version, 'mcversion': project.minecraft.version
-    }
-
-    // 复制其他资源文件（模型、纹理、语言文件等），但不替换变量。
-    from(sourceSets.main.resources.srcDirs) {
-        exclude 'mcmod.info'
+    filesMatching('mcmod.info') { expand version: project.version, mcversion: '1.12.2' }
+}
+jar {
+    manifest { attributes 'ModType': 'CRL', 'Implementation-Version': project.version }
+    from 'LICENSE'
+}
+sourceSets {
+    runtimeHarness {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += output + compileClasspath
     }
 }
+tasks.register('runtimeHarnessJar', Jar) {
+    dependsOn tasks.runtimeHarnessClasses
+    archiveFileName = 'mmce-addition-verification-mcp.jar'
+    destinationDirectory = layout.buildDirectory.dir('verification')
+    from sourceSets.runtimeHarness.output
+}
+extensions.getByType(net.minecraftforge.renamer.gradle.RenamerExtension).classes('reobfRuntimeHarnessJar', tasks.named('runtimeHarnessJar')) {
+    map.from tasks.named('reobfJar').get().map
+    libraries.setFrom(sourceSets.main.compileClasspath, tasks.named('jar'))
+    output = layout.buildDirectory.file('verification/mmce-addition-verification-srg.jar')
+}
+apply from: 'gradle/cleanroom040-mixin.gradle'

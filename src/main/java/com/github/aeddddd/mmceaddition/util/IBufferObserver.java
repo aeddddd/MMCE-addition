@@ -14,4 +14,8 @@ public interface IBufferObserver {
      * 实现方应把对应方块加入待处理集合。
      */
     void onBufferNonEmpty();
+
+    /** Called after every material change so the owning chunk can be saved. */
+    default void onBufferChanged() { }
+
 }

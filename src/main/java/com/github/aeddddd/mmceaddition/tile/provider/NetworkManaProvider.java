@@ -1,6 +1,6 @@
 package com.github.aeddddd.mmceaddition.tile.provider;
 
-import appeng.api.networking.security.IActionHost;
+import ae2.api.networking.security.IActionHost;
 import com.github.aeddddd.mmceaddition.compat.NetworkResourceCompat;
 import hellfirepvp.modularmachinery.common.machine.IOType;
 import hellfirepvp.modularmachinery.common.machine.MachineComponent;
@@ -11,7 +11,7 @@ import kport.modularmagic.common.tile.machinecomponent.MachineComponentManaProvi
  * 网络魔力代理 provider（不放置进世界的虚拟 Tile）.
  *
  * <p>继承 MMCE 原生 {@link TileManaProvider} 并把存量/消耗委托给 AE 网络
- * （经 {@link NetworkResourceCompat} 反射调用 AE2Enhanced 的网络 Mana API）。
+ * （经 {@link NetworkResourceCompat} 通过原生 AE2S 资源键访问网络 Mana）。
  * ManaProviderCopy 的快照与 RequirementMana 的消耗全部通过可重写方法走通，
  * 无需 mixin。</p>
  *

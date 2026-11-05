@@ -201,9 +201,9 @@ public class LongInputItemHandler extends IItemHandlerImpl {
         if (stack.isEmpty()) {
             // 替换为空：扣除该槽映射变体的全部数量。
             if (oldVariant != null && oldAmount > 0) {
-                buffer.extract(oldVariant, oldAmount);
+                buffer.extract(oldVariant, Math.min(oldAmount, Integer.MAX_VALUE));
             }
-            slotVariants[slot] = null;
+            if (oldVariant == null || buffer.getAmount(oldVariant) == 0) slotVariants[slot] = null;
             return;
         }
 
@@ -211,7 +211,7 @@ public class LongInputItemHandler extends IItemHandlerImpl {
         long newCount = stack.getCount();
         if (newVariant.equals(oldVariant)) {
             // 同变体替换：按差额调整。
-            long delta = newCount - oldAmount;
+            long delta = newCount - Math.min(oldAmount, Integer.MAX_VALUE);
             if (delta > 0) {
                 ItemStack add = stack.copy();
                 add.setCount((int) Math.min(delta, Integer.MAX_VALUE));

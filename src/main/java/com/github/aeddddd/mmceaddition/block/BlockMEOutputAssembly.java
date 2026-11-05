@@ -112,5 +112,12 @@ public class BlockMEOutputAssembly extends BlockMachineComponent {
         if (te instanceof TileMEOutputAssembly && stack.hasTagCompound()) {
             ((TileMEOutputAssembly) te).readBuffersFromNBT(stack.getTagCompound());
         }
+        if (!worldIn.isRemote && placer instanceof net.minecraft.entity.player.EntityPlayer) {
+            net.minecraft.tileentity.TileEntity placed = worldIn.getTileEntity(pos);
+            if (placed instanceof com.github.aeddddd.mmceaddition.tile.TileMENetworkComponent) {
+                ((com.github.aeddddd.mmceaddition.tile.TileMENetworkComponent) placed)
+                        .setOwner((net.minecraft.entity.player.EntityPlayer) placer);
+            }
+        }
     }
 }

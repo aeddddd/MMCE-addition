@@ -1,6 +1,6 @@
 package com.github.aeddddd.mmceaddition.gui;
 
-import appeng.api.implementations.ICraftingPatternItem;
+import ae2.api.crafting.PatternDetailsHelper;
 import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
 import com.github.aeddddd.mmceaddition.tile.slot.PatternAssemblySlot;
 import net.minecraft.entity.player.EntityPlayer;
@@ -66,10 +66,10 @@ public class ContainerMEPatternAssembly extends Container {
             final int slotIndex = i;
             int x = 8 + (i % 9) * 18;
             int y = 28 + (i / 9) * 18;
-            addSlotToContainer(new SlotItemHandler(owner.getPatterns(), slotIndex, x, y) {
+            addSlotToContainer(new SlotItemHandler(owner.getPatterns().toItemHandler(), slotIndex, x, y) {
                 @Override
                 public boolean isItemValid(ItemStack stack) {
-                    return !stack.isEmpty() && stack.getItem() instanceof ICraftingPatternItem;
+                    return PatternDetailsHelper.isEncodedPattern(stack);
                 }
             });
         }
@@ -361,7 +361,7 @@ public class ContainerMEPatternAssembly extends Container {
             }
         } else {
             // 从玩家背包：样板优先放入样板槽，否则放入催化剂槽
-            if (!stack.isEmpty() && stack.getItem() instanceof ICraftingPatternItem) {
+            if (PatternDetailsHelper.isEncodedPattern(stack)) {
                 if (!mergeItemStack(stack, 0, PATTERNS, false)) {
                     return ItemStack.EMPTY;
                 }

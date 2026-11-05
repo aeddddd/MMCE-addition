@@ -1,19 +1,22 @@
 package com.github.aeddddd.mmceaddition.tile;
 
-import appeng.api.networking.crafting.ICraftingPatternDetails;
-import appeng.api.networking.crafting.ICraftingProvider;
-import appeng.api.networking.crafting.ICraftingProviderHelper;
-import appeng.api.networking.events.MENetworkCraftingPatternChange;
-import appeng.api.storage.data.IAEItemStack;
-import appeng.helpers.DualityInterface;
-import appeng.helpers.ICustomNameObject;
-import appeng.helpers.IInterfaceHost;
-import appeng.me.GridAccessException;
-import appeng.me.helpers.AENetworkProxy;
-import appeng.api.networking.security.IActionSource;
-import appeng.tile.inventory.AppEngInternalInventory;
-import appeng.util.inv.IAEAppEngInventory;
-import appeng.util.inv.InvOperation;
+import ae2.api.crafting.IPatternDetails;
+import ae2.api.crafting.PatternDetailsHelper;
+import ae2.api.inventories.InternalInventory;
+import ae2.api.implementations.blockentities.PatternContainerGroup;
+import ae2.api.networking.IGrid;
+import ae2.api.networking.IManagedGridNode;
+import ae2.api.networking.crafting.ICraftingProvider;
+import ae2.api.networking.security.IActionSource;
+import ae2.api.stacks.AEItemKey;
+import ae2.api.stacks.AEFluidKey;
+import ae2.api.stacks.AEKey;
+import ae2.api.stacks.GenericStack;
+import ae2.api.stacks.KeyCounter;
+import ae2.helpers.patternprovider.PatternContainer;
+import ae2.util.inv.AppEngInternalInventory;
+import ae2.util.inv.InternalInventoryHost;
+
 import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.compat.NetworkEnergyCompat;
@@ -36,8 +39,6 @@ import github.kasuminova.mmce.common.event.recipe.RecipeFailureEvent;
 import github.kasuminova.mmce.common.event.recipe.RecipeFinishEvent;
 import github.kasuminova.mmce.common.event.recipe.RecipeStartEvent;
 import github.kasuminova.mmce.common.event.recipe.RecipeTickEvent;
-import appeng.api.implementations.ICraftingPatternItem;
-import github.kasuminova.mmce.common.tile.base.MEMachineComponent;
 import hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent;
 import hellfirepvp.modularmachinery.common.crafting.requirement.RequirementCatalyst;
 import hellfirepvp.modularmachinery.common.crafting.requirement.RequirementFluid;
@@ -80,13 +81,12 @@ import java.util.*;
  *   <li>通过 Mixin + ThreadLocal 实现检查期隔离</li>
  * </ul>
  */
-public class TileMEPatternAssembly extends MEMachineComponent
+public class TileMEPatternAssembly extends TileMENetworkComponent
         implements MachineComponentTile,
                    MachineComponentTileNotifiable,
                    ICraftingProvider,
-                   IAEAppEngInventory,
-                   ICustomNameObject,
-                   IInterfaceHost {
+                   InternalInventoryHost,
+                   PatternContainer {
 
     public static final int PATTERNS = 36;
     public static final int SLOT_CATALYST_COUNT = PatternAssemblySlot.CATALYST_SLOTS;
@@ -94,18 +94,11 @@ public class TileMEPatternAssembly extends MEMachineComponent
     // 36 个样板槽（使用 AppEngInternalInventory 保持与原版一致）
     protected final AppEngInternalInventory patterns;
 
-    /**
-     * 接口终端（Interface Terminal）接入所需的 AE 接口二元体。
-     * 只用于向终端提供位置/排序/名称等信息，样板库存仍由本类的 patterns 提供
-     * （见 ContainerInterfaceTerminalMixin，它会把我们的样板库存注册进终端列表）。
-     */
-    private final DualityInterface duality;
-
     // 36 个 PatternAssemblySlot
     protected final PatternAssemblySlot[] slots = new PatternAssemblySlot[PATTERNS];
 
-    // 样板解析缓存：pattern slot index -> ICraftingPatternDetails
-    protected final ICraftingPatternDetails[] details = new ICraftingPatternDetails[PATTERNS];
+    // 样板解析缓存：pattern slot index -> IPatternDetails
+    protected final IPatternDetails[] details = new IPatternDetails[PATTERNS];
 
     // 自定义名称
     private String customName = "";
@@ -131,7 +124,11 @@ public class TileMEPatternAssembly extends MEMachineComponent
     }
 
     public TileMEPatternAssembly() {
-        this.patterns = new AppEngInternalInventory(this, PATTERNS);
+        this.patterns = new AppEngInternalInventory(this, PATTERNS, 1) {
+            @Override public boolean isItemValid(int slot, ItemStack stack) {
+                return PatternDetailsHelper.isEncodedPattern(stack);
+            }
+        };
         for (int i = 0; i < PATTERNS; i++) {
             this.slots[i] = new PatternAssemblySlot(i, this);
         }
@@ -139,83 +136,32 @@ public class TileMEPatternAssembly extends MEMachineComponent
         this.aggregatedInputFluidHandler = new AggregatedInputFluidHandler();
         this.aggregatedOutputItemHandler = new AggregatedOutputItemHandler();
         this.aggregatedOutputFluidHandler = new AggregatedOutputFluidHandler();
-        // 与 MMCE 的 MEPatternProvider 相同：proxy 由基类字段初始化，此处已可用
-        this.duality = new AssemblyDuality(this.proxy, this);
     }
 
-    /**
-     * 接口终端接入用的 DualityInterface。
-     * <p>
-     * DualityInterface.getInstalledUpgrades 读的是自身的升级库存（恒空），
-     * 而接口终端用它决定每行展示多少个样板槽（9 + 9×N）。
-     * 这里对 PATTERN_EXPANSION 恒报 3，让终端完整展示 36 个样板槽。
-     */
-    private static class AssemblyDuality extends DualityInterface {
-        AssemblyDuality(AENetworkProxy proxy, IInterfaceHost host) {
-            super(proxy, host);
+    @Override
+    protected void configureNode(IManagedGridNode node) {
+        node.addService(ICraftingProvider.class, this);
+    }
+
+    @Override public IGrid getGrid() { return getMainNode().getGrid(); }
+    @Override public InternalInventory getTerminalPatternInventory() { return patterns; }
+    @Override public boolean containsPattern(AEItemKey pattern) {
+        for (ItemStack stack : patterns) {
+            if (pattern.equals(AEItemKey.of(stack))) return true;
         }
-
-        @Override
-        public int getInstalledUpgrades(appeng.api.config.Upgrades upgrades) {
-            if (upgrades == appeng.api.config.Upgrades.PATTERN_EXPANSION) {
-                return 3;
-            }
-            return super.getInstalledUpgrades(upgrades);
-        }
+        return false;
     }
-
-    // ==================== IInterfaceHost（接口终端可见性） ====================
-
-    @Override
-    public DualityInterface getInterfaceDuality() {
-        return duality;
+    @Override public long getTerminalSortOrder() { return pos.toLong(); }
+    @Override public PatternContainerGroup getTerminalGroup() {
+        return new PatternContainerGroup(AEItemKey.of(getVisualItemStack()),
+                new net.minecraft.util.text.TextComponentString(getCustomInventoryName()), Collections.emptyList());
     }
-
-    @Override
-    public java.util.EnumSet<EnumFacing> getTargets() {
-        return java.util.EnumSet.allOf(EnumFacing.class);
+    @Override public void openTerminalPatternContainerGui(net.minecraft.entity.player.EntityPlayer player) {
+        player.openGui(MMCEAddition.instance, com.github.aeddddd.mmceaddition.gui.GuiHandler.GUI_ME_PATTERN_ASSEMBLY,
+                world, pos.getX(), pos.getY(), pos.getZ());
     }
-
-    @Override
-    public TileEntity getTileEntity() {
-        return this;
-    }
-
-    @Override
-    public int getInstalledUpgrades(appeng.api.config.Upgrades upgrades) {
-        // 与 MEPatternProvider 一致：视为满配 PATTERN_EXPANSION，终端展示全部 36 个样板槽
-        return 3;
-    }
-
-    @Override
-    public TileEntity getTile() {
-        return this;
-    }
-
-    @Override
-    public net.minecraftforge.items.IItemHandler getInventoryByName(String name) {
-        return duality.getInventoryByName(name);
-    }
-
-    @Override
-    public com.google.common.collect.ImmutableSet<appeng.api.networking.crafting.ICraftingLink> getRequestedJobs() {
-        return duality.getRequestedJobs();
-    }
-
-    @Override
-    public IAEItemStack injectCraftedItems(appeng.api.networking.crafting.ICraftingLink link, IAEItemStack items, appeng.api.config.Actionable mode) {
-        return duality.injectCraftedItems(link, items, mode);
-    }
-
-    @Override
-    public void jobStateChange(appeng.api.networking.crafting.ICraftingLink link) {
-        duality.jobStateChange(link);
-    }
-
-    @Override
-    public appeng.api.util.IConfigManager getConfigManager() {
-        return duality.getConfigManager();
-    }
+    @Override public boolean canEditTerminalName() { return true; }
+    @Override public void setTerminalCustomName(@Nullable String name) { setCustomName(name); }
 
     // ==================== MachineComponentTile ====================
 
@@ -465,8 +411,7 @@ public class TileMEPatternAssembly extends MEMachineComponent
         public boolean receiveEnergy(long amount) {
             // 全有或全无：先模拟确认网络可完整容纳本次产出，再实际回注
             if (NetworkEnergyCompat.insertEnergy(TileMEPatternAssembly.this, amount, true) >= amount) {
-                NetworkEnergyCompat.insertEnergy(TileMEPatternAssembly.this, amount, false);
-                return true;
+                return NetworkEnergyCompat.insertEnergy(TileMEPatternAssembly.this, amount, false) >= amount;
             }
             return false;
         }
@@ -475,95 +420,76 @@ public class TileMEPatternAssembly extends MEMachineComponent
     // ==================== ICraftingProvider ====================
 
     @Override
-    public void provideCrafting(@Nonnull ICraftingProviderHelper helper) {
-        for (int i = 0; i < PATTERNS; i++) {
-            ICraftingPatternDetails detail = details[i];
-            if (detail != null) {
-                helper.addCraftingOption(this, detail);
-            }
-        }
+    public List<IPatternDetails> getAvailablePatterns() {
+        List<IPatternDetails> result = new ArrayList<>();
+        for (IPatternDetails detail : details) if (detail != null) result.add(detail);
+        return result;
     }
 
     @Override
-    public boolean pushPattern(@Nonnull ICraftingPatternDetails patternDetails, @Nonnull InventoryCrafting table) {
-        if (!proxy.isActive()) {
+    public boolean canMergePatternPush(IPatternDetails pattern) {
+        return findPatternSlot(pattern) >= 0;
+    }
+
+    @Override
+    public int getMaxPatternPushMultiplier(IPatternDetails pattern, int maxMultiplier) {
+        return getMainNode().isActive() && findPatternSlot(pattern) >= 0
+                ? Math.min(4096, Math.max(0, maxMultiplier)) : 0;
+    }
+
+    @Override
+    public boolean pushPattern(IPatternDetails pattern, KeyCounter[] inputHolder, int multiplier) {
+        if (!getMainNode().isActive() || multiplier <= 0 || inputHolder == null) return false;
+        int index = findPatternSlot(pattern);
+        if (index < 0 || !pattern.supportsPushInputsToExternalInventory()) return false;
+        Map<AEKey, Long> inputs = new LinkedHashMap<>();
+        try {
+            // AE2S already multiplied inputHolder. Do not multiply the quantities again.
+            pattern.pushInputsToExternalInventory(inputHolder, (key, amount) -> {
+                if (!(key instanceof AEItemKey) && !(key instanceof AEFluidKey)) {
+                    throw new IllegalArgumentException("Unsupported pattern input: " + key);
+                }
+                if (amount <= 0) throw new IllegalArgumentException("Non-positive pattern input");
+                // The existing MMCE fluid buffers store plain fluid types.
+                if (key instanceof AEFluidKey fluid && fluid.toStack(1).tag != null) {
+                    throw new IllegalArgumentException("Tagged fluid is not representable by this buffer");
+                }
+                inputs.merge(key, amount, Math::addExact);
+            });
+        } catch (ArithmeticException | IllegalArgumentException invalidInput) {
             return false;
         }
-
-        int slotIndex = findPatternSlot(patternDetails);
-        if (slotIndex < 0) {
-            return false;
-        }
-
-        // 同一配方的材料允许累积到同一槽位（与原版 ME 供应器的共享缓冲同理）：
-        // CPU 单 tick 内可连续多次推送同一配方，输入缓冲累积全部材料，
-        // 机器端再由并行度决定单次运行消耗多少份，
-        // 避免"推一份拒一次"导致 CPU 反复调度卡顿。
-        PatternAssemblySlot slot = slots[slotIndex];
-
-        // 收集 InventoryCrafting 中的物品与流体（流体经 AE2FC 假物品解码）
-        List<ItemStack> inputs = new ArrayList<>();
-        List<FluidStack> fluidInputs = new ArrayList<>();
-        for (int i = 0; i < table.getSizeInventory(); i++) {
-            ItemStack stack = table.getStackInSlot(i);
-            if (stack.isEmpty()) {
-                continue;
-            }
-            FluidStack fluid = decodeFluidInput(stack);
-            if (fluid != null) {
-                fluidInputs.add(fluid);
-            } else {
-                inputs.add(stack);
+        PatternAssemblySlot slot = slots[index];
+        synchronized (slot.getInputItemBuffer()) {
+            synchronized (slot.getInputFluidBuffer()) {
+                // Validate every input before accepting any materials. A rejected push
+                // leaves both local buffers and the CPU's input holders unchanged.
+                for (Map.Entry<AEKey, Long> input : inputs.entrySet()) {
+                    long stored = input.getKey() instanceof AEItemKey item
+                            ? slot.getInputItemBuffer().getAmount(new ItemVariant(item.toStack()))
+                            : slot.getInputFluidBuffer().getAmount(((AEFluidKey) input.getKey()).getFluid());
+                    if (input.getValue() > Long.MAX_VALUE - stored) return false;
+                }
+                for (Map.Entry<AEKey, Long> input : inputs.entrySet()) {
+                    if (input.getKey() instanceof AEItemKey item) {
+                        slot.getInputItemBuffer().insertLong(new ItemVariant(item.toStack()), input.getValue());
+                    } else {
+                        slot.getInputFluidBuffer().fillLong(((AEFluidKey) input.getKey()).getFluid(), input.getValue());
+                    }
+                }
+                slot.getInputItemHandler().syncWithBuffer();
             }
         }
-        slot.pushPattern(inputs.toArray(new ItemStack[0]));
-        if (!fluidInputs.isEmpty()) {
-            slot.pushPatternFluid(fluidInputs.toArray(new FluidStack[0]));
-        }
-
-        if (MMCEAdditionConfig.debugPatternAssembly) {
-            MMCEAddition.LOGGER.debug("MEPatternAssembly at {} pushed pattern into slot {} with {} item inputs, {} fluid inputs",
-                    getPos(), slotIndex, inputs.size(), fluidInputs.size());
-        }
-
-        // 触发控制器立即尝试启动配方
+        markDirty();
         notifyNeighbors();
-
         return true;
     }
 
-    @Override
-    public boolean isBusy() {
-        // 同一配方的推送总是累积到该配方已有的槽位，不同配方各占独立槽位，
-        // 因此只要 CPU 推送的是我们声明过的样板就一定能接收；
-        // 返回 true 只会让 CPU 跳过本 provider，人为拖慢发配。
-        return false;
-    }
+    @Override public boolean isBusy() { return !getMainNode().isActive(); }
 
     // ==================== 样板管理 ====================
 
-    /** AE2FC（AE2 Fluid Crafting）是否加载：流体样板输入解码依赖它的假物品 API。 */
-    private static final boolean AE2FC_LOADED = net.minecraftforge.fml.common.Loader.isModLoaded("ae2fc");
-
-    /**
-     * 如果给定的物品堆是 AE2FC 的流体假物品（流体样板推送时的流体载体），
-     * 则解码为 {@link FluidStack}；否则返回 null。
-     * <p>
-     * 与 MMCE 原版 ME Pattern Provider 的处理方式一致：
-     * 仅在 AE2FC 加载时才引用其类，保证软依赖安全。
-     */
-    @Nullable
-    private static FluidStack decodeFluidInput(@Nonnull ItemStack stack) {
-        if (!AE2FC_LOADED) {
-            return null;
-        }
-        if (!com.glodblock.github.common.item.fake.FakeFluids.isFluidFakeItem(stack)) {
-            return null;
-        }
-        return com.glodblock.github.common.item.fake.FakeItemRegister.getStack(stack);
-    }
-
-    private int findPatternSlot(@Nonnull ICraftingPatternDetails patternDetails) {
+    private int findPatternSlot(@Nonnull IPatternDetails patternDetails) {
         // 必须用 equals 比较（与 MMCE 的 MEPatternProvider 用 List.indexOf 同理）：
         // AE2 的 getPatternForItem 每次都 new PatternHelper(...)，
         // CraftingCPU 持有的 details 实例与我们缓存的实例不是同一个对象，
@@ -579,6 +505,10 @@ public class TileMEPatternAssembly extends MEMachineComponent
     }
 
     public void refreshPatterns() {
+        if (world instanceof net.minecraft.world.WorldServer serverWorld && !serverWorld.isCallingFromMinecraftThread()) {
+            serverWorld.addScheduledTask(() -> { if (!isInvalid()) refreshPatterns(); });
+            return;
+        }
         for (int i = 0; i < PATTERNS; i++) {
             refreshPattern(i);
         }
@@ -587,49 +517,39 @@ public class TileMEPatternAssembly extends MEMachineComponent
 
     protected void refreshPattern(int index) {
         ItemStack patternStack = patterns.getStackInSlot(index);
-        ICraftingPatternDetails detail = null;
-        if (!patternStack.isEmpty() && patternStack.getItem() instanceof ICraftingPatternItem) {
-            detail = ((ICraftingPatternItem) patternStack.getItem()).getPatternForItem(patternStack, world);
+        IPatternDetails detail = null;
+        if (!patternStack.isEmpty() && world != null) {
+            detail = PatternDetailsHelper.decodePattern(patternStack, world);
         }
         details[index] = detail;
         slots[index].setPatternDetails(detail);
     }
 
-    // ==================== IAEAppEngInventory ====================
+    // ==================== Native inventory callbacks ====================
 
     @Override
-    public void onChangeInventory(net.minecraftforge.items.IItemHandler inv, int slot, InvOperation op, ItemStack removed, ItemStack added) {
+    public void onChangeInventory(AppEngInternalInventory inv, int slot) {
         if (inv == patterns) {
             refreshPattern(slot);
-            if (proxy.isReady()) {
-                try {
-                    proxy.getGrid().postEvent(new MENetworkCraftingPatternChange(this, proxy.getNode()));
-                } catch (GridAccessException ignored) {
-                }
-            }
+            postPatternChangeEvent();
         }
     }
+    @Override public void saveChangedInventory(AppEngInternalInventory inv) { markDirty(); }
+    @Override public boolean isClientSide() { return world == null || world.isRemote; }
 
-    @Override
-    public void saveChanges() {
-        markDirty();
-    }
+    // ==================== Custom name ====================
 
-    // ==================== ICustomNameObject ====================
-
-    @Override
     public String getCustomInventoryName() {
         return hasCustomInventoryName() ? customName : I18n.translateToLocal("tile.mmceaddition.me_pattern_assembly.name");
     }
 
-    @Override
     public boolean hasCustomInventoryName() {
         return customName != null && !customName.isEmpty();
     }
 
-    @Override
     public void setCustomName(String name) {
-        this.customName = name;
+        this.customName = name == null ? "" : name;
+        markDirty();
     }
 
     // ==================== MachineComponentTileNotifiable ====================
@@ -678,12 +598,13 @@ public class TileMEPatternAssembly extends MEMachineComponent
     }
 
     private void postPatternChangeEvent() {
-        if (proxy.isReady()) {
-            try {
-                proxy.getGrid().postEvent(new MENetworkCraftingPatternChange(this, proxy.getNode()));
-            } catch (GridAccessException ignored) {
-            }
+        // MMCE posts structure changes from its recipe/structure workers. Native
+        // AE2S provider registration is owned exclusively by the server thread.
+        if (world instanceof net.minecraft.world.WorldServer serverWorld && !serverWorld.isCallingFromMinecraftThread()) {
+            serverWorld.addScheduledTask(() -> { if (!isInvalid()) postPatternChangeEvent(); });
+            return;
         }
+        ICraftingProvider.requestUpdate(getMainNode());
     }
 
     // ==================== 催化剂与 RecipeCheckEvent ====================
@@ -917,11 +838,12 @@ public class TileMEPatternAssembly extends MEMachineComponent
         return true;
     }
 
-    private boolean matchesRecipeByOutputs(@Nullable ICraftingPatternDetails details, hellfirepvp.modularmachinery.common.crafting.MachineRecipe recipe) {
+    private boolean matchesRecipeByOutputs(@Nullable IPatternDetails details, hellfirepvp.modularmachinery.common.crafting.MachineRecipe recipe) {
         if (details == null || recipe == null) return false;
         // 通过输出物品进行匹配：只比较物品种类与 NBT，忽略数量。
-        for (IAEItemStack output : details.getCondensedOutputs()) {
-            ItemStack outputStack = output.createItemStack();
+        for (GenericStack output : details.getOutputs()) {
+            if (!(output.what() instanceof AEItemKey item)) continue;
+            ItemStack outputStack = item.toStack();
             for (hellfirepvp.modularmachinery.common.crafting.helper.ComponentRequirement<?, ?> req : recipe.getCraftingRequirements()) {
                 if (req.getActionType() != IOType.OUTPUT) continue;
                 if (req instanceof RequirementIngredientArray) {
@@ -979,7 +901,7 @@ public class TileMEPatternAssembly extends MEMachineComponent
      * AE 网络是否已连接且激活（有频道、有能源）。
      */
     public boolean isNetworkActive() {
-        return proxy != null && proxy.isActive();
+        return getMainNode().isActive();
     }
 
     /**
@@ -987,7 +909,7 @@ public class TileMEPatternAssembly extends MEMachineComponent
      */
     public int getUsedPatternSlotCount() {
         int used = 0;
-        for (int i = 0; i < patterns.getSlots(); i++) {
+        for (int i = 0; i < patterns.size(); i++) {
             if (!patterns.getStackInSlot(i).isEmpty()) {
                 used++;
             }
@@ -1047,6 +969,8 @@ public class TileMEPatternAssembly extends MEMachineComponent
     public void onLoad() {
         super.onLoad();
         if (world != null && !world.isRemote) {
+            refreshPatterns();
+            postPatternChangeEvent();
             if (!registered) {
                 MEAsyncOutputManager.INSTANCE.register(this);
                 registered = true;
@@ -1124,7 +1048,7 @@ public class TileMEPatternAssembly extends MEMachineComponent
     public void readCustomNBT(NBTTagCompound compound) {
         super.readCustomNBT(compound);
         if (compound.hasKey("Patterns")) {
-            patterns.readFromNBT(compound.getCompoundTag("Patterns"));
+            patterns.readFromNBT(compound, "Patterns");
         }
         if (compound.hasKey("Slots")) {
             NBTTagList slotList = compound.getTagList("Slots", Constants.NBT.TAG_COMPOUND);

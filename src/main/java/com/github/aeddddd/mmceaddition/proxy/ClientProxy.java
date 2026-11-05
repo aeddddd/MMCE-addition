@@ -12,7 +12,7 @@ import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
  * <ul>
  *   <li>net.minecraft.client.*</li>
  *   <li>net.minecraftforge.client.*</li>
- *   <li>appeng.client.*</li>
+ *   <li>ae2.client.*</li>
  * </ul>
  * <p>
  * 本模组把模型注册、Tooltip 处理等逻辑放在 {@link com.github.aeddddd.mmceaddition.client.ClientEventHandler}

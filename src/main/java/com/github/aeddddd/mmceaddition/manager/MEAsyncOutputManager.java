@@ -1,20 +1,13 @@
 package com.github.aeddddd.mmceaddition.manager;
 
-import appeng.api.AEApi;
-import appeng.api.networking.IGrid;
-import appeng.api.networking.energy.IEnergyGrid;
-import appeng.api.networking.energy.IEnergySource;
-import appeng.api.networking.security.IActionSource;
-import appeng.api.networking.storage.IStorageGrid;
-import appeng.api.storage.IMEMonitor;
-import appeng.api.storage.channels.IFluidStorageChannel;
-import appeng.api.storage.channels.IItemStorageChannel;
-import appeng.api.storage.data.IAEFluidStack;
-import appeng.api.storage.data.IAEItemStack;
-import appeng.fluids.util.AEFluidStack;
-import appeng.me.GridAccessException;
-import appeng.util.Platform;
-import appeng.util.item.AEItemStack;
+import ae2.api.networking.IGrid;
+import ae2.api.networking.energy.IEnergySource;
+import ae2.api.networking.security.IActionSource;
+import ae2.api.storage.MEStorage;
+import ae2.api.storage.StorageHelper;
+import ae2.api.stacks.AEItemKey;
+import ae2.api.stacks.AEFluidKey;
+
 import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncFluidOutputHatch;
@@ -44,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>每个异步输出方块不再单独注册为 AE2 的 IGridTickable，避免大量节点占用网格 tick。</li>
  *   <li>所有方块把产出先缓冲到本地，然后由这个单一管理器统一调度、批量注入。</li>
  *   <li>只处理缓冲区非空的“脏”方块，而不是每 tick 扫描所有注册方块。</li>
- *   <li>按 AE 网格分组，每个网格每 tick 只查一次 IStorageGrid / IEnergyGrid。</li>
+ *   <li>按 AE 网格分组，每个网格每 tick 只查一次 AE2S storage / energy。</li>
  * </ul>
  */
 public enum MEAsyncOutputManager {
@@ -99,14 +92,12 @@ public enum MEAsyncOutputManager {
     private final Set<TileMEOutputAssembly> dirtyOutputAssemblies = ConcurrentHashMap.newKeySet();
 
     /**
-     * AE2 物品存储通道，用于创建 IAEItemStack 和获取 IMEMonitor。
+     * AE2S 统一资源存储。
      */
-    private final IItemStorageChannel itemChannel = AEApi.instance().storage().getStorageChannel(IItemStorageChannel.class);
 
     /**
      * AE2 流体存储通道。
      */
-    private final IFluidStorageChannel fluidChannel = AEApi.instance().storage().getStorageChannel(IFluidStorageChannel.class);
 
     /**
      * 服务端 tick 计数器，用于按配置间隔批量注入。
@@ -392,12 +383,10 @@ public enum MEAsyncOutputManager {
                 it.remove();
                 continue;
             }
-            try {
-                IGrid grid = bus.getProxy().getGrid();
+            IGrid grid = bus.getMainNode().isActive() ? bus.getMainNode().getGrid() : null;
+            if (grid != null) {
                 gridMap.computeIfAbsent(grid, k -> new ArrayList<>()).add(bus);
                 collected++;
-            } catch (GridAccessException ignored) {
-                // 尚未连接到网格，保留在 dirty 集合中等待下次尝试。
             }
         }
 
@@ -421,12 +410,9 @@ public enum MEAsyncOutputManager {
      * 对每个总线单独捕获异常，避免某个总线出错导致同网格的其他总线被跳过。
      */
     private void processItemGrid(IGrid grid, List<TileMEAsyncItemOutputBus> buses) {
-        IStorageGrid storage = grid.getCache(IStorageGrid.class);
-        IEnergySource energy = grid.getCache(IEnergyGrid.class);
-        if (storage == null || energy == null) {
-            return;
-        }
-        IMEMonitor<IAEItemStack> monitor = storage.getInventory(itemChannel);
+        MEStorage storage = grid.getStorageService().getInventory();
+        IEnergySource energy = grid.getEnergyService();
+        MEStorage monitor = storage;
 
         for (TileMEAsyncItemOutputBus bus : buses) {
             try {
@@ -443,12 +429,12 @@ public enum MEAsyncOutputManager {
     /**
      * 处理单个物品总线：把缓冲区中每种物品一次性注入 ME 网络。
      */
-    private void processItemBus(TileMEAsyncItemOutputBus bus, IMEMonitor<IAEItemStack> monitor, IEnergySource energy) {
+    private void processItemBus(TileMEAsyncItemOutputBus bus, MEStorage monitor, IEnergySource energy) {
         LongItemBuffer buffer = bus.getItemBuffer();
         processItemBusItem(buffer, monitor, energy, bus.getSource());
     }
 
-    private void processItemBusItem(LongItemBuffer buffer, IMEMonitor<IAEItemStack> monitor, IEnergySource energy, IActionSource source) {
+    private void processItemBusItem(LongItemBuffer buffer, MEStorage monitor, IEnergySource energy, IActionSource source) {
         // 先取快照，避免在遍历过程中缓冲区被并发修改。
         Map<ItemVariant, Long> snapshot = buffer.snapshot();
         for (Map.Entry<ItemVariant, Long> entry : snapshot.entrySet()) {
@@ -458,18 +444,9 @@ public enum MEAsyncOutputManager {
                 continue;
             }
 
-            // 创建代表该变体的 AE 物品堆，数量为 1，然后再 setStackSize。
-            IAEItemStack toInsert = AEItemStack.fromItemStack(variant.toSingleStack());
-            if (toInsert == null) {
-                // 如果无法创建 AEItemStack，直接丢弃（极端情况）。
-                buffer.extract(variant, amount);
-                continue;
-            }
-            toInsert.setStackSize(amount);
-
-            // Platform.poweredInsert 会先扣除能量，然后把物品存入网络，返回剩余量。
-            IAEItemStack leftover = Platform.poweredInsert(energy, monitor, toInsert, source);
-            long inserted = amount - (leftover == null ? 0 : leftover.getStackSize());
+            AEItemKey key = AEItemKey.of(variant.toSingleStack());
+            if (key == null) continue;
+            long inserted = StorageHelper.poweredInsert(energy, monitor, key, amount, source);
             if (inserted > 0) {
                 buffer.extract(variant, inserted);
                 cycleInjectedItems += inserted;
@@ -503,11 +480,10 @@ public enum MEAsyncOutputManager {
                 it.remove();
                 continue;
             }
-            try {
-                IGrid grid = assembly.getProxy().getGrid();
+            IGrid grid = assembly.getMainNode().isActive() ? assembly.getMainNode().getGrid() : null;
+            if (grid != null) {
                 gridMap.computeIfAbsent(grid, k -> new ArrayList<>()).add(assembly);
                 collected++;
-            } catch (GridAccessException ignored) {
             }
         }
 
@@ -525,13 +501,10 @@ public enum MEAsyncOutputManager {
     }
 
     private void processPatternAssemblyGrid(IGrid grid, List<TileMEPatternAssembly> assemblies) {
-        IStorageGrid storage = grid.getCache(IStorageGrid.class);
-        IEnergySource energy = grid.getCache(IEnergyGrid.class);
-        if (storage == null || energy == null) {
-            return;
-        }
-        IMEMonitor<IAEItemStack> itemMonitor = storage.getInventory(itemChannel);
-        IMEMonitor<IAEFluidStack> fluidMonitor = storage.getInventory(fluidChannel);
+        MEStorage storage = grid.getStorageService().getInventory();
+        IEnergySource energy = grid.getEnergyService();
+        MEStorage itemMonitor = storage;
+        MEStorage fluidMonitor = storage;
 
         for (TileMEPatternAssembly assembly : assemblies) {
             try {
@@ -573,11 +546,10 @@ public enum MEAsyncOutputManager {
                 it.remove();
                 continue;
             }
-            try {
-                IGrid grid = assembly.getProxy().getGrid();
+            IGrid grid = assembly.getMainNode().isActive() ? assembly.getMainNode().getGrid() : null;
+            if (grid != null) {
                 gridMap.computeIfAbsent(grid, k -> new ArrayList<>()).add(assembly);
                 collected++;
-            } catch (GridAccessException ignored) {
             }
         }
 
@@ -595,13 +567,10 @@ public enum MEAsyncOutputManager {
     }
 
     private void processOutputAssemblyGrid(IGrid grid, List<TileMEOutputAssembly> assemblies) {
-        IStorageGrid storage = grid.getCache(IStorageGrid.class);
-        IEnergySource energy = grid.getCache(IEnergyGrid.class);
-        if (storage == null || energy == null) {
-            return;
-        }
-        IMEMonitor<IAEItemStack> itemMonitor = storage.getInventory(itemChannel);
-        IMEMonitor<IAEFluidStack> fluidMonitor = storage.getInventory(fluidChannel);
+        MEStorage storage = grid.getStorageService().getInventory();
+        IEnergySource energy = grid.getEnergyService();
+        MEStorage itemMonitor = storage;
+        MEStorage fluidMonitor = storage;
 
         for (TileMEOutputAssembly assembly : assemblies) {
             try {
@@ -641,11 +610,10 @@ public enum MEAsyncOutputManager {
                 it.remove();
                 continue;
             }
-            try {
-                IGrid grid = hatch.getProxy().getGrid();
+            IGrid grid = hatch.getMainNode().isActive() ? hatch.getMainNode().getGrid() : null;
+            if (grid != null) {
                 gridMap.computeIfAbsent(grid, k -> new ArrayList<>()).add(hatch);
                 collected++;
-            } catch (GridAccessException ignored) {
             }
         }
 
@@ -663,12 +631,9 @@ public enum MEAsyncOutputManager {
     }
 
     private void processFluidGrid(IGrid grid, List<TileMEAsyncFluidOutputHatch> hatches) {
-        IStorageGrid storage = grid.getCache(IStorageGrid.class);
-        IEnergySource energy = grid.getCache(IEnergyGrid.class);
-        if (storage == null || energy == null) {
-            return;
-        }
-        IMEMonitor<IAEFluidStack> monitor = storage.getInventory(fluidChannel);
+        MEStorage storage = grid.getStorageService().getInventory();
+        IEnergySource energy = grid.getEnergyService();
+        MEStorage monitor = storage;
 
         for (TileMEAsyncFluidOutputHatch hatch : hatches) {
             try {
@@ -681,12 +646,12 @@ public enum MEAsyncOutputManager {
         }
     }
 
-    private void processFluidHatch(TileMEAsyncFluidOutputHatch hatch, IMEMonitor<IAEFluidStack> monitor, IEnergySource energy) {
+    private void processFluidHatch(TileMEAsyncFluidOutputHatch hatch, MEStorage monitor, IEnergySource energy) {
         LongFluidBuffer buffer = hatch.getFluidBuffer();
         processFluidHatchFluid(buffer, monitor, energy, hatch.getSource());
     }
 
-    private void processFluidHatchFluid(LongFluidBuffer buffer, IMEMonitor<IAEFluidStack> monitor, IEnergySource energy, IActionSource source) {
+    private void processFluidHatchFluid(LongFluidBuffer buffer, MEStorage monitor, IEnergySource energy, IActionSource source) {
         Map<Fluid, Long> snapshot = buffer.snapshot();
         for (Map.Entry<Fluid, Long> entry : snapshot.entrySet()) {
             Fluid fluid = entry.getKey();
@@ -695,15 +660,10 @@ public enum MEAsyncOutputManager {
                 continue;
             }
 
-            IAEFluidStack toInsert = AEFluidStack.fromFluidStack(new FluidStack(fluid, 1));
-            if (toInsert == null) {
-                buffer.extract(fluid, amount);
-                continue;
-            }
-            toInsert.setStackSize(amount);
-
-            IAEFluidStack leftover = Platform.poweredInsert(energy, monitor, toInsert, source);
-            long inserted = amount - (leftover == null ? 0 : leftover.getStackSize());
+            AEFluidKey key = AEFluidKey.of(fluid);
+            if (key == null) continue;
+            // AE2S uses mB for fluid amounts, matching the local long buffer.
+            long inserted = StorageHelper.poweredInsert(energy, monitor, key, amount, source);
             if (inserted > 0) {
                 buffer.extract(fluid, inserted);
                 cycleInjectedFluids += inserted;

@@ -1,0 +1,38 @@
+[
+  {
+    "file": "AppliedEnergistics2-Supergiant-1.1.0+a47dfe029.jar",
+    "source": "https://github.com/FormlessDragon/Applied-Energistics-2-Supergiant/releases/tag/dev",
+    "sha256": "7d82003578a820bf3dce121d98fd08911c8e5dcbe558e6158f6cc18558e98233"
+  },
+  {
+    "file": "appcompat-1.0.1-cleanroom.1.jar",
+    "source": "https://github.com/FormlessDragon/AppliedCompatibility/pull/16",
+    "sha256": "e8cc33de7a06d6c60122f413a25a656022c9e552f524a0aad1cc91e340c245a4"
+  },
+  {
+    "file": "modularmachinery-community-edition-817377-7372951.jar",
+    "source": "https://www.curseforge.com/minecraft/mc-mods/modularmachinery-community-edition/files/7372951",
+    "sha256": "83676773e8c4f63963a48b4921f05898dcdbfdf777230e53e9830cd8f18177fb"
+  },
+  {
+    "file": "crafttweaker-4.1.20.698.jar",
+    "source": "https://maven.blamejared.com/CraftTweaker2/CraftTweaker2-MC1120-Main/1.12-4.1.20.698/",
+    "sha256": "b2e5e443f18d0d5bcfd1364f9ec89565e6a1e2ad4568b899c590aa5507978b27"
+  },
+  {
+    "file": "jei-4.35.1.jar",
+    "source": "https://maven.cleanroommc.com/mezz/jei/4.35.1/",
+    "sha256": "8777b115592519ea0b077032988301853b39794edbb67f54b54cbef6715b283b"
+  },
+  {
+    "file": "geckolib-388172-4020277.jar",
+    "source": "https://www.curseforge.com/minecraft/mc-mods/geckolib/files/4020277",
+    "sha256": "b00bc9de4e3e94cea0455f8d58b295c1464272135e842bdf3170c2c955c871a5"
+  },
+  {
+    "file": "Cleanroom-0.4.0-Server-Compatibility-1.0.0.jar",
+    "server_only": true,
+    "source": "Cleanroom 0.4.0 Kirino dedicated-server discovery fix (source archived with verification)",
+    "sha256": "ab21b0b5940e83190cf84a9eb7f266332b7358e1942968b1213fe32260660bbb"
+  }
+]

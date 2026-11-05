@@ -1,0 +1,46 @@
+// Compile injector annotations against the actual 0.4.0 runtime. Newer SDKs
+// changed Redirect.at from At to At[], which produces incompatible bytecode
+// annotations for 0.4.0's MixinExtras factory transformer even without remapping.
+configurations { cleanroom040Mixin }
+// CleanroomGradle reserves com.cleanroommc modules for its current Maven host. The
+// 0.4.0 installer instead pins this archived runtime API to Arcseekers. Fetch its
+// exact bytes directly so SDK repository rules cannot silently select a newer API.
+def baselineApi = [
+    [path: 'com/cleanroommc/sponge-mixin/0.20.12+mixin.0.8.7/sponge-mixin-0.20.12+mixin.0.8.7.jar',
+     origin: 'https://maven.arcseekers.com/releases/', sha1: '05a3dd8dbe6dc8881ad28f3e16d0ff71f2de1e48'],
+    [path: 'io/github/llamalad7/mixinextras-common/0.5.3/mixinextras-common-0.5.3.jar',
+     origin: 'https://repo.maven.apache.org/maven2/', sha1: '13ad40ee435e671fec18e3f0d6afec8c874b08b5']
+]
+def baselineDirectory = layout.buildDirectory.dir('dependencies/cleanroom-0.4.0')
+def prepareBaselineApi = tasks.register('prepareCleanroom040MixinApi') {
+    inputs.property 'artifacts', baselineApi
+    outputs.files(baselineApi.collect { entry -> baselineDirectory.map { it.file(entry.path.tokenize('/').last()) } })
+    doLast {
+        baselineApi.each { entry ->
+            def target = baselineDirectory.get().file(entry.path.tokenize('/').last()).asFile
+            target.parentFile.mkdirs()
+            if (!target.exists()) {
+                def cached = file('../../.dev/ae2-addons-cleanroom-0.4.0-runtime/libraries/' + entry.path)
+                if (cached.exists()) java.nio.file.Files.copy(cached.toPath(), target.toPath())
+                else providers.exec {
+                    commandLine 'curl', '--fail', '--location', '--retry', '3', '--output', target.absolutePath, entry.origin + entry.path
+                }.result.get().assertNormalExitValue()
+            }
+            if (java.security.MessageDigest.getInstance('SHA-1').digest(target.bytes).encodeHex().toString() != entry.sha1)
+                throw new GradleException('Formal Cleanroom 0.4.0 API checksum mismatch: ' + target.name)
+        }
+    }
+}
+dependencies {
+    cleanroom040Mixin files(baselineApi.collect { entry -> baselineDirectory.map { it.file(entry.path.tokenize('/').last()) } }).builtBy(prepareBaselineApi)
+}
+tasks.withType(JavaCompile).configureEach {
+    classpath = files(configurations.cleanroom040Mixin, classpath)
+    if (name == 'compileJava') {
+        options.annotationProcessorPath = files(configurations.cleanroom040Mixin,
+                options.annotationProcessorPath, sourceSets.main.compileClasspath)
+    }
+}
+tasks.withType(Test).configureEach {
+    classpath = files(configurations.cleanroom040Mixin, classpath)
+}

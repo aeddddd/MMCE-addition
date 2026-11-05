@@ -2,7 +2,6 @@ package com.github.aeddddd.mmceaddition.manager;
 
 import appeng.api.storage.data.IAEFluidStack;
 import appeng.fluids.util.IAEFluidTank;
-import appeng.me.GridAccessException;
 import appeng.me.helpers.IGridProxyable;
 import com.github.aeddddd.mmceaddition.tile.TileInputAssembly;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncFluidOutputHatch;
@@ -286,14 +285,15 @@ public final class HatchAdminManager {
 
     /** AE 网络状态：1 在线，0 离线/无频道，-1 非网络仓室。 */
     private static byte networkState(TileEntity te) {
+        if (te instanceof ae2.me.helpers.IGridConnectedTile) {
+            return (byte) (((ae2.me.helpers.IGridConnectedTile) te).getMainNode().isActive() ? 1 : 0);
+        }
         if (!(te instanceof IGridProxyable)) {
             return -1;
         }
         try {
             ((IGridProxyable) te).getProxy().getGrid();
             return 1;
-        } catch (GridAccessException e) {
-            return 0;
         } catch (Exception e) {
             return 0;
         }
