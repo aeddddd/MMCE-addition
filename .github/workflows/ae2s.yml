@@ -16,5 +16,3 @@ jobs:
           cache: gradle
       - name: Unit regressions and production jars
         run: ./gradlew test reobfJar reobfRuntimeHarnessJar --console=plain
-      - name: Exact-baseline server prerequisite tests
-        run: ./gradlew -p verification/server-compat-source test jar --console=plain

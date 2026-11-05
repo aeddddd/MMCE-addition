@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
     id 'com.cleanroommc.cleanroomgradle'
 }
-version = '1.4.4-ae2s.1'
+version = '1.4.4-ae2s.2'
 group = 'com.github.aeddddd'
 base.archivesName = 'MMCE-addition'
 java {
@@ -17,9 +17,6 @@ repositories {
     maven { url = 'https://maven.blamejared.com' }
 }
 apply from: 'gradle/ae2-supergiant.gradle'
-// AppliedCompatibility supplies MMCE's existing legacy ABI. The addon's own
-// network nodes, transfers, patterns and terminal integration use ae2.* directly.
-apply from: 'gradle/appcompat-api.gradle'
 dependencies {
     implementation cleanroom.userdev(cleanroom_version)
     implementation(deobf('curse.maven:modularmachinery-community-edition-817377:7372951')) { transitive = false }

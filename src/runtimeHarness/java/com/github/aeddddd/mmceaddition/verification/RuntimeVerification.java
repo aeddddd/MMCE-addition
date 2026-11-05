@@ -13,8 +13,11 @@ import ae2.api.storage.*;
 import ae2.core.definitions.AEBlocks;
 import ae2.me.helpers.IGridConnectedTile;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
+import com.github.aeddddd.mmceaddition.command.CommandMMCEAddition;
 import com.github.aeddddd.mmceaddition.compat.NetworkEnergyCompat;
 import com.github.aeddddd.mmceaddition.compat.NetworkResourceCompat;
+import com.github.aeddddd.mmceaddition.manager.HatchAdminManager;
+import com.github.aeddddd.mmceaddition.manager.HatchType;
 import com.github.aeddddd.mmceaddition.tile.*;
 import com.github.aeddddd.mmceaddition.util.*;
 import com.google.gson.GsonBuilder;
@@ -75,6 +78,8 @@ public final class RuntimeVerification {
         report.put("checks", checks);
         require("0.4.0".equals(report.get("cleanroom")), "Wrong loader baseline");
         require(Runtime.version().feature() == 25, "Java 25 required");
+        require(!Loader.isModLoaded("appliedenergistics2"), "Acceptance must run without a legacy AE2 bridge");
+        checks.add("native-ae2s-without-legacy-ae2-bridge");
         MinecraftForge.EVENT_BUS.register(this);
         if (event.getSide().isClient()) ClientVerification.install();
     }
@@ -101,7 +106,7 @@ public final class RuntimeVerification {
                     if (FMLCommonHandler.instance().getSide().isClient() && !ClientVerification.done()) return;
                     require(clientFailure==null,"Client GUI failure: "+clientFailure);
                     if (FMLCommonHandler.instance().getSide().isClient()) checks.add("registered-item-and-block-models-baked-and-rendered-server-backed-gui-120-slots-pattern-sync-and-shift-click");
-                    invalidate(); finish("PASS", null);
+                    adminChecks(); invalidate(); finish("PASS", null);
                 }
             }
         } catch (Throwable failure) { failure.printStackTrace(); finish("FAIL", failure); }
@@ -243,6 +248,20 @@ public final class RuntimeVerification {
         phase=8;
     }
     private boolean active() { return items.getMainNode().isActive() && fluids.getMainNode().isActive() && patterns.getMainNode().isActive(); }
+    private void adminChecks() {
+        items.getItemBuffer().insertLong(new ItemVariant(new ItemStack(Items.APPLE)),3_000_000_000L);
+        fluids.getFluidBuffer().fillLong(FluidRegistry.WATER,4_000_000_000L);
+        int mask=HatchType.ASYNC_ITEM_OUT.bit() | HatchType.ASYNC_FLUID_OUT.bit();
+        var scan=HatchAdminManager.scan(world,mask,HatchAdminManager.NET_ONLINE,HatchAdminManager.SORT_BUFFERED);
+        require(scan.totalFound==2 && scan.onlineCount==2 && scan.offlineCount==0,"Native admin network classification failed");
+        require(scan.entries.get(0).buffered==4_000_000_000L && scan.entries.get(1).buffered==3_000_000_000L,
+                "Native admin lost long buffer amounts");
+        require(HatchAdminManager.clearBuffers(world,mask)==2 && items.getItemBuffer().isEmpty() && fluids.getFluidBuffer().isEmpty(),
+                "Native admin could not clear buffers");
+        new CommandMMCEAddition().execute(server,server,new String[]{"replaceMeItemBus"});
+        require(world.getTileEntity(items.getPos())==items,"Legacy migration command replaced a native device");
+        checks.add("native-hatch-admin-network-long-counts-clear-and-command-without-legacy-classloading");
+    }
     private void invalidate() {
         for (TileMENetworkComponent tile : List.of(items,fluids,patterns,output)) {
             tile.invalidate(); require(tile.getMainNode().getNode()==null,"Invalidation retained a native node");

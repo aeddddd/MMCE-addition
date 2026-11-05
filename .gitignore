@@ -74,8 +74,6 @@ verification/evidence/
 
 __pycache__/
 logs/
-verification/server-compat-source/.gradle/
-verification/server-compat-source/build/
 
 !src/main/resources/**/*.json
 !src/runtimeHarness/resources/**/*.json

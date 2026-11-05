@@ -31,7 +31,7 @@ for entry in json.loads((ROOT/'verification/dependencies.json').read_text()):
     with jar.open('rb') as stream:actual=hashlib.file_digest(stream,'sha256').hexdigest()
     if actual!=entry['sha256']:raise SystemExit('Dependency hash mismatch: '+str(jar))
     mods.append(jar)
-mods += [ROOT/'build/libs/MMCE-addition-1.4.4-ae2s.1.jar',ROOT/'build/verification/mmce-addition-verification-srg.jar']
+mods += [ROOT/'build/libs/MMCE-addition-1.4.4-ae2s.2.jar',ROOT/'build/verification/mmce-addition-verification-srg.jar']
 command=[sys.executable,str(ROOT/'verification/launch.py'),a.side,'--name',a.name,'--port',str(a.port),
          '--timeout',str(a.timeout),'--report','verification-report.json']
 for jar in mods:command+=['--mod',str(jar)]

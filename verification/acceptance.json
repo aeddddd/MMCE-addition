@@ -1,42 +1,28 @@
 {
-  "upstream_base": "411d44d5064f7fd16ee26683320fd7c42092c385",
-  "target": {
-    "minecraft": "1.12.2",
-    "cleanroom": "0.4.0",
-    "java": 25,
-    "ae2s": "1.1.0+a47dfe029"
+  "result": "FUNCTIONAL_PASS",
+  "minecraft": "1.12.2",
+  "cleanroom": "0.4.0",
+  "java": 25,
+  "external_patches": [],
+  "production_jar": {
+    "file": "MMCE-addition-1.4.4-ae2s.2.jar",
+    "sha256": "79a550888fe878088d2aac88a3b90a59d075dc9fda35f45c00686bf4643a1d8b"
   },
-  "production_artifact": {
-    "file": "MMCE-addition-1.4.4-ae2s.1.jar",
-    "sha256": "d872c8eb99b042e8ea1271014e63203a1ac47dc8a0b11207fa7d31ac90ffd116",
-    "bytes": 429389
-  },
-  "verification_artifact": {
+  "harness_jar": {
     "file": "mmce-addition-verification-srg.jar",
-    "sha256": "7464bd64b4b977d88fc69d2e5071dba3384cbd3404072af829a2b90fcc03298f"
+    "sha256": "71a720f19ef04dc632131dbab5bb8887d08d096a9cab8ae37c00c4b78e93eb33"
   },
-  "unit_regressions": {
-    "tests": 5,
-    "failures": 0,
-    "errors": 0,
-    "skipped": 0
-  },
-  "server_prerequisite_regressions": {
-    "tests": 2,
-    "failures": 0,
-    "errors": 0,
-    "skipped": 0
+  "production_jar_audit": {
+    "classes": 189,
+    "legacy_ae2_references": false,
+    "bundled_ae2_classes": false,
+    "loader_transformer": false
   },
   "dependencies": [
     {
       "file": "AppliedEnergistics2-Supergiant-1.1.0+a47dfe029.jar",
       "source": "https://github.com/FormlessDragon/Applied-Energistics-2-Supergiant/releases/tag/dev",
       "sha256": "7d82003578a820bf3dce121d98fd08911c8e5dcbe558e6158f6cc18558e98233"
-    },
-    {
-      "file": "appcompat-1.0.1-cleanroom.1.jar",
-      "source": "https://github.com/FormlessDragon/AppliedCompatibility/pull/16",
-      "sha256": "e8cc33de7a06d6c60122f413a25a656022c9e552f524a0aad1cc91e340c245a4"
     },
     {
       "file": "modularmachinery-community-edition-817377-7372951.jar",
@@ -57,81 +43,66 @@
       "file": "geckolib-388172-4020277.jar",
       "source": "https://www.curseforge.com/minecraft/mc-mods/geckolib/files/4020277",
       "sha256": "b00bc9de4e3e94cea0455f8d58b295c1464272135e842bdf3170c2c955c871a5"
-    },
-    {
-      "file": "Cleanroom-0.4.0-Server-Compatibility-1.0.0.jar",
-      "server_only": true,
-      "source": "Cleanroom 0.4.0 Kirino dedicated-server discovery fix (source archived with verification)",
-      "sha256": "ab21b0b5940e83190cf84a9eb7f266332b7358e1942968b1213fe32260660bbb"
     }
   ],
-  "results": {
-    "server": {
-      "cleanroom": "0.4.0",
-      "side": "server",
-      "exit": 0,
-      "loader_version_seen": true,
-      "server_ready": true,
-      "timed_out": false,
-      "gameplay_report": {
+  "unit_regressions": {
+    "tests": 5,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "scenarios": {
+    "client-and-integrated-server": {
+      "evidence_directory": "build/verification/inmod-native-r2/client",
+      "result": {
         "cleanroom": "0.4.0",
-        "checks": [
-          "all-registered-tiles-construct-and-round-trip-nbt",
-          "native-in-world-capability-and-shared-grid",
-          "item-and-fluid-partial-insertion-preserves-exact-remainder",
-          "offline-buffers-and-nbt-preserve-materials",
-          "disconnected-output-retries-after-native-grid-reconnect",
-          "native-slot-36-index-terminal-and-merged-mixed-long-inputs",
-          "long-buffer-consumption-and-atomic-overflow-rejection",
-          "pattern-edits-refresh-native-crafting-index",
-          "optional-resource-mods-absent-without-linkage-errors",
-          "native-rf-key-fixture-worker-marshalling-and-atomic-insufficient-resource-rejection",
-          "physical-mmce-multiblock-consumes-native-pattern-input-and-returns-product",
-          "native-node-and-manager-cleanup"
-        ],
-        "result": "PASS",
-        "ticks": 121
+        "side": "client",
+        "exit": 0,
+        "loader_version_seen": true,
+        "server_ready": false,
+        "timed_out": false,
+        "gameplay_report": {
+          "cleanroom": "0.4.0",
+          "checks": [
+            "native-ae2s-without-legacy-ae2-bridge",
+            "all-registered-tiles-construct-and-round-trip-nbt",
+            "native-in-world-capability-and-shared-grid",
+            "item-and-fluid-partial-insertion-preserves-exact-remainder",
+            "offline-buffers-and-nbt-preserve-materials",
+            "disconnected-output-retries-after-native-grid-reconnect",
+            "native-slot-36-index-terminal-and-merged-mixed-long-inputs",
+            "long-buffer-consumption-and-atomic-overflow-rejection",
+            "pattern-edits-refresh-native-crafting-index",
+            "optional-resource-mods-absent-without-linkage-errors",
+            "native-rf-key-fixture-worker-marshalling-and-atomic-insufficient-resource-rejection",
+            "physical-mmce-multiblock-consumes-native-pattern-input-and-returns-product",
+            "registered-item-and-block-models-baked-and-rendered-server-backed-gui-120-slots-pattern-sync-and-shift-click",
+            "native-hatch-admin-network-long-counts-clear-and-command-without-legacy-classloading",
+            "native-node-and-manager-cleanup"
+          ],
+          "result": "PASS",
+          "ticks": 193
+        },
+        "result": "FUNCTIONAL_PASS"
       },
-      "result": "FUNCTIONAL_PASS"
-    },
-    "client": {
-      "cleanroom": "0.4.0",
-      "side": "client",
-      "exit": 0,
-      "loader_version_seen": true,
-      "server_ready": false,
-      "timed_out": false,
-      "gameplay_report": {
-        "cleanroom": "0.4.0",
-        "checks": [
-          "all-registered-tiles-construct-and-round-trip-nbt",
-          "native-in-world-capability-and-shared-grid",
-          "item-and-fluid-partial-insertion-preserves-exact-remainder",
-          "offline-buffers-and-nbt-preserve-materials",
-          "disconnected-output-retries-after-native-grid-reconnect",
-          "native-slot-36-index-terminal-and-merged-mixed-long-inputs",
-          "long-buffer-consumption-and-atomic-overflow-rejection",
-          "pattern-edits-refresh-native-crafting-index",
-          "optional-resource-mods-absent-without-linkage-errors",
-          "native-rf-key-fixture-worker-marshalling-and-atomic-insufficient-resource-rejection",
-          "physical-mmce-multiblock-consumes-native-pattern-input-and-returns-product",
-          "registered-item-and-block-models-baked-and-rendered-server-backed-gui-120-slots-pattern-sync-and-shift-click",
-          "native-node-and-manager-cleanup"
-        ],
-        "result": "PASS",
-        "ticks": 170
+      "runtime_json_sha256": "16960fd2edcf81327e2979f3220555fdaaf3e695f61baad3bcd6e26a97eee8a3",
+      "console_sha256": "d46a83151ce0974ec849d58277cd869991e14944f50376eebd667264879b34c1",
+      "jars": {
+        "AppliedEnergistics2-Supergiant-1.1.0+a47dfe029.jar": "7d82003578a820bf3dce121d98fd08911c8e5dcbe558e6158f6cc18558e98233",
+        "modularmachinery-community-edition-817377-7372951.jar": "83676773e8c4f63963a48b4921f05898dcdbfdf777230e53e9830cd8f18177fb",
+        "crafttweaker-4.1.20.698.jar": "b2e5e443f18d0d5bcfd1364f9ec89565e6a1e2ad4568b899c590aa5507978b27",
+        "jei-4.35.1.jar": "8777b115592519ea0b077032988301853b39794edbb67f54b54cbef6715b283b",
+        "geckolib-388172-4020277.jar": "b00bc9de4e3e94cea0455f8d58b295c1464272135e842bdf3170c2c955c871a5",
+        "MMCE-addition-1.4.4-ae2s.2.jar": "79a550888fe878088d2aac88a3b90a59d075dc9fda35f45c00686bf4643a1d8b",
+        "mmce-addition-verification-srg.jar": "71a720f19ef04dc632131dbab5bb8887d08d096a9cab8ae37c00c4b78e93eb33"
       },
-      "result": "FUNCTIONAL_PASS"
+      "installer_sha256": "882435d851a51e14b802e0a9384e4a05cfbb3890fca435c40c494af75e5a166f"
     }
   },
-  "evidence": {
-    "screenshot": "native-pattern-assembly.png",
-    "raw_logs": "build/verification/native-ae2s-r7/<side>/console.log"
-  },
-  "boundaries": [
-    "AE2S target; no AE2UEL or original AE2 runtime claim.",
-    "Exact Cleanroom 0.4.0 needs the documented AppliedCompatibility compatibility build and dedicated-server discovery prerequisite.",
-    "Tagged fluid and unsupported custom resource pattern inputs are rejected atomically.",
-    "Optional RF adapter is exercised using a registered-key fixture; an installed AE2Enhanced/Botania/Astral Sorcery/Thaumic Energistics combination is not claimed as tested."
-  ]
+  "scope": "Automated client/integrated-server functional checks and unit regressions.",
+  "runtime_confirmation": {
+    "source": "user",
+    "result": "PASS",
+    "scope": "User confirmed normal operation in their tested runtime environment."
+  }
 }
