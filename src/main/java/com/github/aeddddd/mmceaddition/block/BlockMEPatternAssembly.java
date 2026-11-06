@@ -113,5 +113,12 @@ public class BlockMEPatternAssembly extends BlockMachineComponent {
         if (tile instanceof TileMEPatternAssembly && stack.hasTagCompound()) {
             ((TileMEPatternAssembly) tile).readCustomNBT(stack.getTagCompound());
         }
+        if (!world.isRemote && placer instanceof net.minecraft.entity.player.EntityPlayer) {
+            net.minecraft.tileentity.TileEntity placed = world.getTileEntity(pos);
+            if (placed instanceof com.github.aeddddd.mmceaddition.tile.TileMENetworkComponent) {
+                ((com.github.aeddddd.mmceaddition.tile.TileMENetworkComponent) placed)
+                        .setOwner((net.minecraft.entity.player.EntityPlayer) placer);
+            }
+        }
     }
 }

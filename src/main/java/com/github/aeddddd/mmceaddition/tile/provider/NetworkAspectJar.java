@@ -1,6 +1,6 @@
 package com.github.aeddddd.mmceaddition.tile.provider;
 
-import appeng.api.networking.security.IActionHost;
+import ae2.api.networking.security.IActionHost;
 import com.github.aeddddd.mmceaddition.compat.NetworkResourceCompat;
 import thaumcraft.api.aspects.Aspect;
 import thaumcraft.common.tiles.essentia.TileJarFillable;

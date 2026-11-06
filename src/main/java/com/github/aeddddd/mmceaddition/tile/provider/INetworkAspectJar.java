@@ -1,6 +1,6 @@
 package com.github.aeddddd.mmceaddition.tile.provider;
 
-import appeng.api.networking.security.IActionHost;
+import ae2.api.networking.security.IActionHost;
 
 /**
  * 网络源质代理 jar 的标记接口（不含任何 Thaumcraft 类型引用）.

@@ -1,6 +1,6 @@
 package com.github.aeddddd.mmceaddition.tile.provider;
 
-import appeng.api.networking.security.IActionHost;
+import ae2.api.networking.security.IActionHost;
 import com.github.aeddddd.mmceaddition.compat.NetworkResourceCompat;
 import hellfirepvp.modularmachinery.common.machine.MachineComponent;
 import net.minecraftforge.fml.common.Loader;

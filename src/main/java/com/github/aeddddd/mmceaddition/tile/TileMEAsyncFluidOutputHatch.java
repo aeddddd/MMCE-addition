@@ -1,16 +1,5 @@
 package com.github.aeddddd.mmceaddition.tile;
 
-import appeng.api.networking.GridFlags;
-import appeng.api.networking.IGridNode;
-import appeng.api.networking.security.IActionHost;
-import appeng.api.networking.security.IActionSource;
-import appeng.api.util.AECableType;
-import appeng.api.util.AEPartLocation;
-import appeng.api.util.DimensionalCoord;
-import appeng.me.GridAccessException;
-import appeng.me.helpers.AENetworkProxy;
-import appeng.me.helpers.IGridProxyable;
-import appeng.me.helpers.MachineSource;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.gui.IBufferViewProvider;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
@@ -36,21 +25,17 @@ import javax.annotation.Nullable;
  * <p>
  * 与 {@link TileMEAsyncItemOutputBus} 对应，处理流体输出。
  */
-public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
-        implements MachineComponentTile, IActionHost, IGridProxyable, IBufferObserver, IBufferViewProvider {
+public class TileMEAsyncFluidOutputHatch extends TileMENetworkComponent
+        implements MachineComponentTile, IBufferObserver, IBufferViewProvider {
 
     private final LongFluidBuffer fluidBuffer = new LongFluidBuffer(this);
     private final LongBufferFluidHandler fluidHandler = new LongBufferFluidHandler(fluidBuffer);
-    private final AENetworkProxy proxy;
-    private final IActionSource source;
 
     private boolean registered = false;
 
-    public TileMEAsyncFluidOutputHatch() {
-        this.proxy = new AENetworkProxy(this, "aeProxy", new ItemStack(RegistryHandler.ME_ASYNC_FLUID_OUTPUT_HATCH), true);
-        this.proxy.setIdlePowerUsage(1.0);
-        this.proxy.setFlags(GridFlags.REQUIRE_CHANNEL);
-        this.source = new MachineSource(this);
+    @Override
+    public ItemStack getVisualItemStack() {
+        return new ItemStack(RegistryHandler.ME_ASYNC_FLUID_OUTPUT_HATCH);
     }
 
     @Nullable
@@ -78,58 +63,10 @@ public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
         return fluidBuffer.getTotalAmount();
     }
 
-    @Nonnull
-    @Override
-    public AENetworkProxy getProxy() {
-        return proxy;
-    }
-
-    @Nullable
-    @Override
-    public IGridNode getGridNode(@Nonnull AEPartLocation dir) {
-        return proxy.getNode();
-    }
-
-    @Nonnull
-    @Override
-    public AECableType getCableConnectionType(@Nonnull AEPartLocation dir) {
-        return AECableType.SMART;
-    }
-
-    @Nonnull
-    @Override
-    public DimensionalCoord getLocation() {
-        return new DimensionalCoord(this);
-    }
-
-    @Override
-    public void gridChanged() {
-    }
-
-    @Nonnull
-    @Override
-    public IGridNode getActionableNode() {
-        return proxy.getNode();
-    }
-
-    @Override
-    public void securityBreak() {
-        if (world != null && pos != null) {
-            world.setBlockToAir(pos);
-        }
-    }
-
-    @Override
-    public void validate() {
-        super.validate();
-        proxy.validate();
-    }
-
     @Override
     public void onLoad() {
         super.onLoad();
         if (!world.isRemote) {
-            proxy.onReady();
             if (!registered) {
                 MEAsyncOutputManager.INSTANCE.register(this);
                 registered = true;
@@ -146,14 +83,12 @@ public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
     @Override
     public void invalidate() {
         super.invalidate();
-        proxy.invalidate();
         unregisterManager();
     }
 
     @Override
     public void onChunkUnload() {
         super.onChunkUnload();
-        proxy.onChunkUnload();
         unregisterManager();
     }
 
@@ -164,9 +99,6 @@ public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
         }
     }
 
-    public IActionSource getSource() {
-        return source;
-    }
 
     @Override
     public boolean hasCapability(@Nonnull Capability<?> capability, @Nullable EnumFacing facing) {
@@ -185,11 +117,6 @@ public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
     @Override
     public void readCustomNBT(NBTTagCompound compound) {
         super.readCustomNBT(compound);
-        try {
-            proxy.readFromNBT(compound);
-        } catch (IllegalStateException e) {
-            // 忽略非法状态异常，通常发生在代理尚未初始化时
-        }
         if (compound.hasKey("Buffer")) {
             fluidBuffer.readFromNBT(compound.getCompoundTag("Buffer"));
         }
@@ -198,7 +125,6 @@ public class TileMEAsyncFluidOutputHatch extends TileColorableMachineComponent
     @Override
     public void writeCustomNBT(NBTTagCompound compound) {
         super.writeCustomNBT(compound);
-        proxy.writeToNBT(compound);
         NBTTagCompound bufferTag = new NBTTagCompound();
         fluidBuffer.writeToNBT(bufferTag);
         compound.setTag("Buffer", bufferTag);

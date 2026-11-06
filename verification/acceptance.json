@@ -1,0 +1,108 @@
+{
+  "result": "FUNCTIONAL_PASS",
+  "minecraft": "1.12.2",
+  "cleanroom": "0.4.0",
+  "java": 25,
+  "external_patches": [],
+  "production_jar": {
+    "file": "MMCE-addition-1.4.4-ae2s.2.jar",
+    "sha256": "79a550888fe878088d2aac88a3b90a59d075dc9fda35f45c00686bf4643a1d8b"
+  },
+  "harness_jar": {
+    "file": "mmce-addition-verification-srg.jar",
+    "sha256": "71a720f19ef04dc632131dbab5bb8887d08d096a9cab8ae37c00c4b78e93eb33"
+  },
+  "production_jar_audit": {
+    "classes": 189,
+    "legacy_ae2_references": false,
+    "bundled_ae2_classes": false,
+    "loader_transformer": false
+  },
+  "dependencies": [
+    {
+      "file": "AppliedEnergistics2-Supergiant-1.1.0+a47dfe029.jar",
+      "source": "https://github.com/FormlessDragon/Applied-Energistics-2-Supergiant/releases/tag/dev",
+      "sha256": "7d82003578a820bf3dce121d98fd08911c8e5dcbe558e6158f6cc18558e98233"
+    },
+    {
+      "file": "modularmachinery-community-edition-817377-7372951.jar",
+      "source": "https://www.curseforge.com/minecraft/mc-mods/modularmachinery-community-edition/files/7372951",
+      "sha256": "83676773e8c4f63963a48b4921f05898dcdbfdf777230e53e9830cd8f18177fb"
+    },
+    {
+      "file": "crafttweaker-4.1.20.698.jar",
+      "source": "https://maven.blamejared.com/CraftTweaker2/CraftTweaker2-MC1120-Main/1.12-4.1.20.698/",
+      "sha256": "b2e5e443f18d0d5bcfd1364f9ec89565e6a1e2ad4568b899c590aa5507978b27"
+    },
+    {
+      "file": "jei-4.35.1.jar",
+      "source": "https://maven.cleanroommc.com/mezz/jei/4.35.1/",
+      "sha256": "8777b115592519ea0b077032988301853b39794edbb67f54b54cbef6715b283b"
+    },
+    {
+      "file": "geckolib-388172-4020277.jar",
+      "source": "https://www.curseforge.com/minecraft/mc-mods/geckolib/files/4020277",
+      "sha256": "b00bc9de4e3e94cea0455f8d58b295c1464272135e842bdf3170c2c955c871a5"
+    }
+  ],
+  "unit_regressions": {
+    "tests": 5,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "scenarios": {
+    "client-and-integrated-server": {
+      "evidence_directory": "build/verification/inmod-native-r2/client",
+      "result": {
+        "cleanroom": "0.4.0",
+        "side": "client",
+        "exit": 0,
+        "loader_version_seen": true,
+        "server_ready": false,
+        "timed_out": false,
+        "gameplay_report": {
+          "cleanroom": "0.4.0",
+          "checks": [
+            "native-ae2s-without-legacy-ae2-bridge",
+            "all-registered-tiles-construct-and-round-trip-nbt",
+            "native-in-world-capability-and-shared-grid",
+            "item-and-fluid-partial-insertion-preserves-exact-remainder",
+            "offline-buffers-and-nbt-preserve-materials",
+            "disconnected-output-retries-after-native-grid-reconnect",
+            "native-slot-36-index-terminal-and-merged-mixed-long-inputs",
+            "long-buffer-consumption-and-atomic-overflow-rejection",
+            "pattern-edits-refresh-native-crafting-index",
+            "optional-resource-mods-absent-without-linkage-errors",
+            "native-rf-key-fixture-worker-marshalling-and-atomic-insufficient-resource-rejection",
+            "physical-mmce-multiblock-consumes-native-pattern-input-and-returns-product",
+            "registered-item-and-block-models-baked-and-rendered-server-backed-gui-120-slots-pattern-sync-and-shift-click",
+            "native-hatch-admin-network-long-counts-clear-and-command-without-legacy-classloading",
+            "native-node-and-manager-cleanup"
+          ],
+          "result": "PASS",
+          "ticks": 193
+        },
+        "result": "FUNCTIONAL_PASS"
+      },
+      "runtime_json_sha256": "16960fd2edcf81327e2979f3220555fdaaf3e695f61baad3bcd6e26a97eee8a3",
+      "console_sha256": "d46a83151ce0974ec849d58277cd869991e14944f50376eebd667264879b34c1",
+      "jars": {
+        "AppliedEnergistics2-Supergiant-1.1.0+a47dfe029.jar": "7d82003578a820bf3dce121d98fd08911c8e5dcbe558e6158f6cc18558e98233",
+        "modularmachinery-community-edition-817377-7372951.jar": "83676773e8c4f63963a48b4921f05898dcdbfdf777230e53e9830cd8f18177fb",
+        "crafttweaker-4.1.20.698.jar": "b2e5e443f18d0d5bcfd1364f9ec89565e6a1e2ad4568b899c590aa5507978b27",
+        "jei-4.35.1.jar": "8777b115592519ea0b077032988301853b39794edbb67f54b54cbef6715b283b",
+        "geckolib-388172-4020277.jar": "b00bc9de4e3e94cea0455f8d58b295c1464272135e842bdf3170c2c955c871a5",
+        "MMCE-addition-1.4.4-ae2s.2.jar": "79a550888fe878088d2aac88a3b90a59d075dc9fda35f45c00686bf4643a1d8b",
+        "mmce-addition-verification-srg.jar": "71a720f19ef04dc632131dbab5bb8887d08d096a9cab8ae37c00c4b78e93eb33"
+      },
+      "installer_sha256": "882435d851a51e14b802e0a9384e4a05cfbb3890fca435c40c494af75e5a166f"
+    }
+  },
+  "scope": "Automated client/integrated-server functional checks and unit regressions.",
+  "runtime_confirmation": {
+    "source": "user",
+    "result": "PASS",
+    "scope": "User confirmed normal operation in their tested runtime environment."
+  }
+}

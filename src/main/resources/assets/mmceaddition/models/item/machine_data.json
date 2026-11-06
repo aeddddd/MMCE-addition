@@ -1,0 +1,7 @@
+{
+  "parent": "item/generated",
+  "textures": {
+    "layer0": "mmceaddition:items/machine_data",
+    "layer1": "mmceaddition:items/machine_data_overlay"
+  }
+}

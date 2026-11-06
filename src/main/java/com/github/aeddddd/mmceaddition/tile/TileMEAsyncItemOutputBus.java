@@ -1,16 +1,5 @@
 package com.github.aeddddd.mmceaddition.tile;
 
-import appeng.api.networking.GridFlags;
-import appeng.api.networking.IGridNode;
-import appeng.api.networking.security.IActionHost;
-import appeng.api.networking.security.IActionSource;
-import appeng.api.util.AECableType;
-import appeng.api.util.AEPartLocation;
-import appeng.api.util.DimensionalCoord;
-import appeng.me.GridAccessException;
-import appeng.me.helpers.AENetworkProxy;
-import appeng.me.helpers.IGridProxyable;
-import appeng.me.helpers.MachineSource;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.gui.IBufferViewProvider;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
@@ -40,12 +29,12 @@ import javax.annotation.Nullable;
  * <ul>
  *   <li>通过 {@link MachineComponentTile#provideComponent()} 向 MMCE 机器暴露一个物品输出总线</li>
  *   <li>机器产出先进入 {@link LongItemBuffer} 缓冲，而不是立刻注入 ME 网络</li>
- *   <li>持有 AE2 的 {@link AENetworkProxy}，用于批量注入时与 ME 网格交互</li>
+ *   <li>持有原生 AE2S 托管节点，用于批量注入时与 ME 网格交互</li>
  *   <li>通过 {@link IBufferObserver} 在缓冲区非空时通知 {@link MEAsyncOutputManager}</li>
  * </ul>
  */
-public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
-        implements MachineComponentTile, IActionHost, IGridProxyable, IBufferObserver, IBufferViewProvider {
+public class TileMEAsyncItemOutputBus extends TileMENetworkComponent
+        implements MachineComponentTile, IBufferObserver, IBufferViewProvider {
 
     /**
      * 物品缓冲区。支持 Long 数量上限，可以累积远超普通槽位的产出。
@@ -58,29 +47,16 @@ public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
      */
     private final LongBufferItemHandler itemHandler = new LongBufferItemHandler(itemBuffer);
 
-    /**
-     * AE2 网络代理。负责与 AE 网格建立/断开连接、获取 grid、执行安全校验等。
-     * 构造函数参数：宿主、名称、代表物品、是否需要通道。
-     */
-    private final AENetworkProxy proxy;
 
-    /**
-     * AE2 动作源。每次向 ME 网络注入时都需要一个 IActionSource，用于权限/审计。
-     */
-    private final IActionSource source;
 
     /**
      * 是否已经注册到 MEAsyncOutputManager。避免重复注册。
      */
     private boolean registered = false;
 
-    public TileMEAsyncItemOutputBus() {
-        // 代表物品用于 AE2 在网格中显示该节点的“机器物品”。
-        this.proxy = new AENetworkProxy(this, "aeProxy", new ItemStack(RegistryHandler.ME_ASYNC_ITEM_OUTPUT_BUS), true);
-        this.proxy.setIdlePowerUsage(1.0);
-        // REQUIRE_CHANNEL 表示该节点需要 AE 频道才能工作（类似普通 ME 设备）。
-        this.proxy.setFlags(GridFlags.REQUIRE_CHANNEL);
-        this.source = new MachineSource(this);
+    @Override
+    public ItemStack getVisualItemStack() {
+        return new ItemStack(RegistryHandler.ME_ASYNC_ITEM_OUTPUT_BUS);
     }
 
     /**
@@ -124,75 +100,12 @@ public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
     }
 
     /**
-     * 获取 AE2 网络代理。
-     */
-    @Nonnull
-    @Override
-    public AENetworkProxy getProxy() {
-        return proxy;
-    }
-
-    @Nullable
-    @Override
-    public IGridNode getGridNode(@Nonnull AEPartLocation dir) {
-        return proxy.getNode();
-    }
-
-    @Nonnull
-    @Override
-    public AECableType getCableConnectionType(@Nonnull AEPartLocation dir) {
-        return AECableType.SMART;
-    }
-
-    @Nonnull
-    @Override
-    public DimensionalCoord getLocation() {
-        return new DimensionalCoord(this);
-    }
-
-    @Override
-    public void gridChanged() {
-    }
-
-    @Nonnull
-    @Override
-    public IGridNode getActionableNode() {
-        return proxy.getNode();
-    }
-
-    /**
-     * 安全破坏：当 AE2 安全系统触发时销毁该方块。
-     */
-    @Override
-    public void securityBreak() {
-        if (world != null && pos != null) {
-            world.setBlockToAir(pos);
-        }
-    }
-
-    /**
-     * TileEntity 被验证时调用。通知 AE 代理验证。
-     */
-    @Override
-    public void validate() {
-        super.validate();
-        proxy.validate();
-    }
-
-    /**
-     * TileEntity 被加载到世界时调用。
-     * <p>
-     * 这里做两件事：
-     * <ul>
-     *   <li>通知 AE 代理准备就绪</li>
-     *   <li>在服务端把本 TileEntity 注册到 MEAsyncOutputManager</li>
-     * </ul>
+     * 原生节点的创建由基类在区块开始 tick 后完成。
      */
     @Override
     public void onLoad() {
         super.onLoad();
         if (!world.isRemote) {
-            proxy.onReady();
             if (!registered) {
                 MEAsyncOutputManager.INSTANCE.register(this);
                 registered = true;
@@ -213,7 +126,6 @@ public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
     @Override
     public void invalidate() {
         super.invalidate();
-        proxy.invalidate();
         unregisterManager();
     }
 
@@ -224,7 +136,6 @@ public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
     @Override
     public void onChunkUnload() {
         super.onChunkUnload();
-        proxy.onChunkUnload();
         unregisterManager();
     }
 
@@ -241,9 +152,6 @@ public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
     /**
      * @return AE2 动作源，批量注入时使用
      */
-    public IActionSource getSource() {
-        return source;
-    }
 
     /**
      * 声明本 TileEntity 支持物品处理能力（Capability）。
@@ -270,7 +178,7 @@ public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
      * <p>
      * TileColorableMachineComponent 已经处理了颜色等基础数据，这里只需要：
      * <ul>
-     *   <li>恢复 AE 代理状态</li>
+     *   <li>恢复 AE2S 节点状态</li>
      *   <li>恢复物品缓冲区内容</li>
      * </ul>
      * <p>
@@ -279,11 +187,6 @@ public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
     @Override
     public void readCustomNBT(NBTTagCompound compound) {
         super.readCustomNBT(compound);
-        try {
-            proxy.readFromNBT(compound);
-        } catch (IllegalStateException e) {
-            // 忽略非法状态异常，通常发生在代理尚未初始化时
-        }
         if (compound.hasKey("Buffer")) {
             itemBuffer.readFromNBT(compound.getCompoundTag("Buffer"));
         }
@@ -295,7 +198,6 @@ public class TileMEAsyncItemOutputBus extends TileColorableMachineComponent
     @Override
     public void writeCustomNBT(NBTTagCompound compound) {
         super.writeCustomNBT(compound);
-        proxy.writeToNBT(compound);
         NBTTagCompound bufferTag = new NBTTagCompound();
         itemBuffer.writeToNBT(bufferTag);
         compound.setTag("Buffer", bufferTag);

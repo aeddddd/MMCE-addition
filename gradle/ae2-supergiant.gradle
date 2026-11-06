@@ -1,0 +1,63 @@
+// Shared, pinned AE2S dependency for the three Cleanroom addon migrations.
+def ae2sVersion = '1.1.0+a47dfe029'
+def ae2sArtifacts = [
+    dev: 'c7fc3c90220dd1d6eaed2ae51cfb45c2ad95b99f65af4d60e1f579b168330ce5',
+    runtime: '7d82003578a820bf3dce121d98fd08911c8e5dcbe558e6158f6cc18558e98233'
+]
+def ae2sDirectory = layout.buildDirectory.dir('dependencies/ae2-supergiant')
+def ae2sFetch = tasks.register('prepareAE2Supergiant') {
+    inputs.property 'version', ae2sVersion
+    inputs.property 'checksums', ae2sArtifacts
+    ae2sArtifacts.each { classifier, sha ->
+        def suffix = classifier == 'dev' ? '-dev' : ''
+        outputs.file ae2sDirectory.map { it.file("AppliedEnergistics2-Supergiant-${ae2sVersion}${suffix}.jar") }
+    }
+    doLast {
+        ae2sArtifacts.each { classifier, expected ->
+            def suffix = classifier == 'dev' ? '-dev' : ''
+            def name = "AppliedEnergistics2-Supergiant-${ae2sVersion}${suffix}.jar"
+            def target = ae2sDirectory.get().file(name).asFile
+            def local = file("../../.dev/ae2-supergiant/${name}")
+            target.parentFile.mkdirs()
+            if (!target.exists()) {
+                if (local.exists()) {
+                    java.nio.file.Files.copy(local.toPath(), target.toPath())
+                } else {
+                    def encodedName = java.net.URLEncoder.encode(name, 'UTF-8').replace('+', '%20')
+                    def url = new URI("https://github.com/FormlessDragon/Applied-Energistics-2-Supergiant/releases/download/dev/${encodedName}").toURL()
+                    def connection = url.openConnection()
+                    connection.connectTimeout = 30000
+                    connection.readTimeout = 120000
+                    connection.inputStream.withCloseable { input ->
+                        target.withOutputStream { output -> output << input }
+                    }
+                }
+            }
+            def digest = java.security.MessageDigest.getInstance('SHA-256')
+            target.withInputStream { input ->
+                byte[] buffer = new byte[65536]
+                int read
+                while ((read = input.read(buffer)) != -1) digest.update(buffer, 0, read)
+            }
+            if (digest.digest().encodeHex().toString() != expected) {
+                target.delete()
+                throw new GradleException("AE2S checksum mismatch: ${name}")
+            }
+        }
+    }
+}
+ext.ae2sDevJar = files(ae2sDirectory.map { it.file("AppliedEnergistics2-Supergiant-${ae2sVersion}-dev.jar") }).builtBy(ae2sFetch)
+ext.ae2sRuntimeJar = files(ae2sDirectory.map { it.file("AppliedEnergistics2-Supergiant-${ae2sVersion}.jar") }).builtBy(ae2sFetch)
+repositories {
+    maven { url = 'https://maven.cleanroommc.com' }
+    maven {
+        url = 'https://cursemaven.com'
+        content { includeGroup 'curse.maven' }
+    }
+}
+dependencies {
+    implementation ae2sDevJar
+    // AEBaseGui's public type hierarchy includes this actual optional API.
+    compileOnly(deobf('curse.maven:mouse-tweaks-unofficial-461660:5876158')) { transitive = false }
+    compileOnly(deobf('mezz:jei:4.35.1')) { transitive = false }
+}

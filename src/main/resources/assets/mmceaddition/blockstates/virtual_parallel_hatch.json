@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "normal": {
+      "model": "mmceaddition:virtual_parallel_hatch"
+    },
+    "inventory": {
+      "model": "mmceaddition:virtual_parallel_hatch"
+    }
+  }
+}

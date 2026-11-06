@@ -69,8 +69,21 @@ public class LongItemBuffer {
         }
 
         storage.put(variant, next);
+        if (observer != null) observer.onBufferChanged();
         notifyIfNonEmpty(wasEmpty);
         return ItemStack.EMPTY;
+    }
+
+    /** Inserts a native AE2S quantity without narrowing it to an int. */
+    public synchronized long insertLong(ItemVariant variant, long amount) {
+        if (amount <= 0) return 0;
+        long current = storage.getOrDefault(variant, 0L);
+        long accepted = Math.min(amount, Long.MAX_VALUE - current);
+        boolean wasEmpty = storage.isEmpty();
+        if (accepted > 0) storage.put(variant, current + accepted);
+        notifyIfNonEmpty(wasEmpty);
+        if (accepted > 0 && observer != null) observer.onBufferChanged();
+        return accepted;
     }
 
     /**
@@ -104,6 +117,7 @@ public class LongItemBuffer {
         } else {
             storage.put(variant, next);
         }
+        if (observer != null) observer.onBufferChanged();
         return toExtract;
     }
 
@@ -175,7 +189,7 @@ public class LongItemBuffer {
         }
         NBTTagList list = compound.getTagList("Items", Constants.NBT.TAG_COMPOUND);
         for (int i = 0; i < list.tagCount(); i++) {
-            NBTTagCompound tag = list.getCompoundTagAt(i);
+            NBTTagCompound tag = list.getCompoundTagAt(i).copy();
             long count = tag.getLong("Count");
             if (count <= 0) {
                 continue;

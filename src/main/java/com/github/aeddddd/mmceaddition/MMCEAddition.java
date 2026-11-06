@@ -36,7 +36,7 @@ import java.util.List;
         version = MMCEAddition.VERSION,
         // dependencies 声明本模组的依赖关系。
         // required-after 表示必须在指定模组之后加载，否则游戏会崩溃并提示缺少依赖。
-        dependencies = "required-after:modularmachinery;required-after:appliedenergistics2"
+        dependencies = "required-after:modularmachinery;required-after:ae2@[1.1.0,)"
 )
 public class MMCEAddition implements ILateMixinLoader {
 
@@ -54,7 +54,7 @@ public class MMCEAddition implements ILateMixinLoader {
     /**
      * 模组版本号。构建时 processResources 任务会把这里和 mcmod.info 里的占位符替换掉。
      */
-    public static final String VERSION = "1.4.4";
+    public static final String VERSION = "1.4.4-ae2s.2";
 
     /**
      * 模组日志记录器。

@@ -1,6 +1,6 @@
 package com.github.aeddddd.mmceaddition.tile.provider;
 
-import appeng.api.networking.security.IActionHost;
+import ae2.api.networking.security.IActionHost;
 import com.github.aeddddd.mmceaddition.compat.NetworkResourceCompat;
 import kport.modularmagic.common.tile.TileStarlightInput;
 
@@ -9,7 +9,7 @@ import kport.modularmagic.common.tile.TileStarlightInput;
  *
  * <p>继承 MMCE 原生 {@link TileStarlightInput}（RequirementStarlight.isValidComponent
  * 硬 instanceof 该类），把 {@link #getStarlightStored()} 委托给 AE 网络星能存量
- * （经 {@link NetworkResourceCompat} 反射调用 AE2Enhanced 的网络 Starlight API）。</p>
+ * （经 {@link NetworkResourceCompat} 通过原生 AE2S 资源键访问网络 Starlight）。</p>
  *
  * <p><b>语义说明</b>：MMCE 原生的星能 INPUT 需求只检查存量、不消耗
  * （原生 TileStarlightInput 依赖自然衰减），本代理保持同一语义——

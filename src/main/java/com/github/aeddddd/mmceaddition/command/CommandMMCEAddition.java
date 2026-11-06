@@ -8,7 +8,6 @@ import com.github.aeddddd.mmceaddition.parallel.FakeParallelMigrator;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
 import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
 import com.github.aeddddd.mmceaddition.virtual.VirtualParallelManager;
-import github.kasuminova.mmce.common.tile.MEItemOutputBus;
 import hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent;
 import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
 import hellfirepvp.modularmachinery.common.machine.IOType;
@@ -16,7 +15,6 @@ import hellfirepvp.modularmachinery.common.machine.MachineComponent;
 import hellfirepvp.modularmachinery.common.tiles.base.TileMultiblockMachineController;
 import hellfirepvp.modularmachinery.common.util.IEnergyHandler;
 import hellfirepvp.modularmachinery.common.util.IEnergyHandlerAsync;
-import hellfirepvp.modularmachinery.common.util.IOInventory;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
 import net.minecraft.entity.Entity;
@@ -31,6 +29,8 @@ import net.minecraft.util.text.TextComponentTranslation;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.gen.ChunkProviderServer;
+import net.minecraftforge.items.CapabilityItemHandler;
+import net.minecraftforge.items.IItemHandler;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -88,7 +88,7 @@ public class CommandMMCEAddition extends CommandBase {
 
         World world = sender.getEntityWorld();
         int replaced = 0;
-        int transferred = 0;
+        long transferred = 0;
 
         // 只遍历已加载区块。
         if (!(world.getChunkProvider() instanceof ChunkProviderServer)) {
@@ -99,12 +99,13 @@ public class CommandMMCEAddition extends CommandBase {
 
         for (Chunk chunk : provider.getLoadedChunks()) {
             // chunk.getTileEntityMap() 返回该区块内所有 TileEntity。
-            for (TileEntity te : chunk.getTileEntityMap().values()) {
-                if (te instanceof MEItemOutputBus) {
+            for (TileEntity te : new ArrayList<>(chunk.getTileEntityMap().values())) {
+                if ("modularmachinery:blockmeitemoutputbus".equals(String.valueOf(te.getBlockType().getRegistryName()))) {
                     BlockPos pos = te.getPos();
 
                     // 先读取原仓内待输出的物品。
-                    IOInventory inv = ((MEItemOutputBus) te).getInternalInventory();
+                    IItemHandler inv = te.getCapability(CapabilityItemHandler.ITEM_HANDLER_CAPABILITY, null);
+                    if (inv == null) continue;
                     ItemStack[] contents = null;
                     if (inv != null) {
                         int slots = inv.getSlots();

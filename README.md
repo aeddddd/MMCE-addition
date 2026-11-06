@@ -1,7 +1,7 @@
 # MMCE Addition
 
 一个面向 Minecraft 1.12.2 的 ModularMachinery Community Edition（MMCE）附属模组，
-为 AE2 Unofficial Extended Life（AE2UEL）提供**异步 ME 输出总成**。
+为 Applied Energistics 2 Supergiant（AE2S / 应用能源 2 超巨星）提供**异步 ME 输出与样板总成**。
 
 ## 功能
 
@@ -18,9 +18,33 @@ of very many MMCE multi-party blocks
 ## 依赖
 
 - Minecraft 1.12.2
-- Forge 14.23.5.2847
+- Cleanroom 0.4.0 正式版（不带 `-alpha`）
+- Java 25
 - ModularMachinery Community Edition
-- AE2 Unofficial Extended Life
+- Applied Energistics 2 Supergiant：`1.1.0+a47dfe029`
+- CraftTweaker2、HEI 与 MMCE 的 GeckoLib 3 前置
+
+## AE2S 原生适配
+
+本分支使用 AE2S 的 `IManagedGridNode`、`AEItemKey` / `AEFluidKey`、
+`MEStorage` / `StorageHelper`、`ICraftingProvider` 合并推送与 `PatternContainer`。
+样板终端直接展示 36 个槽位，不再注入 AE2UEL 的合成 CPU 或接口终端。
+物品和流体数量在原生接口与内部缓冲之间保留 `long`，流体单位为 mB。
+
+适配直接在本 Mod 内实现，不依赖 AppliedCompatibility，也不修改 MMCE、AE2S 或加载器。
+联网仓室使用独立的原生节点基类；仓室管理与迁移命令通过 AE2S 和 Forge Capability
+读取网络、物品和流体，不再链接旧 AE2 类。未安装旧 AE2 桥接层时，MMCE 自身的旧 ME
+设备和旧 AE2 混入保持关闭；本 Mod 的 ME 设备由本 Mod 注册。
+RF、魔力、星能和源质通过已注册的原生资源键访问，资源 Mod 仍为可选。
+
+此分支针对 AE2S；AE2UEL 与原版 AE2 未作为本分支运行目标。
+原有流体缓冲按 Fluid 类型聚合，因此带 NBT 的样板流体输入会整体拒收，避免抹掉标签或部分吞料。
+不支持的自定义资源输入也整体拒收。
+
+构建需要 JDK 25：`./gradlew test reobfJar reobfRuntimeHarnessJar`。
+AE2S 的编译 API 从官方地址下载并校验固定哈希，不会打入本 Mod。
+[验证记录](verification/README.md)使用未修改的官方前置，包含 5 项单元测试、
+15 项客户端及内置服务端功能检查和可复现的依赖锁。
 
 ## 未来更新计划
 新的仓室:

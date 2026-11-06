@@ -1,0 +1,10 @@
+{
+  "registryname": "mmceaddition_ae2s_acceptance",
+  "localizedname": "AE2S Pattern Assembly Acceptance",
+  "requires-blueprint": false,
+  "parts": [
+    {"x": 0, "y": 0, "z": 1, "elements": ["mmceaddition:me_pattern_assembly@0"]},
+    {"x": -1, "y": 0, "z": 1, "elements": ["modularmachinery:blockcasing@0"]},
+    {"x": 1, "y": 0, "z": 1, "elements": ["modularmachinery:blockcasing@0"]}
+  ]
+}

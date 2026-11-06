@@ -1,9 +1,6 @@
 package com.github.aeddddd.mmceaddition.manager;
 
-import appeng.api.storage.data.IAEFluidStack;
-import appeng.fluids.util.IAEFluidTank;
-import appeng.me.GridAccessException;
-import appeng.me.helpers.IGridProxyable;
+import ae2.api.AECapabilities;
 import com.github.aeddddd.mmceaddition.tile.TileInputAssembly;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncFluidOutputHatch;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
@@ -11,13 +8,6 @@ import com.github.aeddddd.mmceaddition.tile.TileMEOutputAssembly;
 import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
 import com.github.aeddddd.mmceaddition.tile.slot.PatternAssemblySlot;
 import com.github.aeddddd.mmceaddition.util.IAutoIOControllable;
-import github.kasuminova.mmce.common.tile.MEFluidInputBus;
-import github.kasuminova.mmce.common.tile.MEFluidOutputBus;
-import github.kasuminova.mmce.common.tile.MEItemInputBus;
-import github.kasuminova.mmce.common.tile.MEItemOutputBus;
-import github.kasuminova.mmce.common.tile.MEPatternProvider;
-import github.kasuminova.mmce.common.tile.base.MEFluidBus;
-import github.kasuminova.mmce.common.tile.base.MEItemBus;
 import hellfirepvp.modularmachinery.common.tiles.TileItemInputBus;
 import hellfirepvp.modularmachinery.common.tiles.TileItemOutputBus;
 import hellfirepvp.modularmachinery.common.tiles.base.TileInventory;
@@ -36,6 +26,8 @@ import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.fluids.capability.CapabilityFluidHandler;
 import net.minecraftforge.fluids.capability.IFluidHandler;
 import net.minecraftforge.fluids.capability.IFluidTankProperties;
+import net.minecraftforge.items.CapabilityItemHandler;
+import net.minecraftforge.items.IItemHandler;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -246,11 +238,15 @@ public final class HatchAdminManager {
         if (te instanceof TileMEPatternAssembly) return HatchType.PATTERN_ASSEMBLY;
         if (te instanceof TileMEOutputAssembly) return HatchType.OUTPUT_ASSEMBLY;
         if (te instanceof TileInputAssembly) return HatchType.INPUT_ASSEMBLY;
-        if (te instanceof MEItemInputBus) return HatchType.ME_ITEM_IN;
-        if (te instanceof MEItemOutputBus) return HatchType.ME_ITEM_OUT;
-        if (te instanceof MEFluidInputBus) return HatchType.ME_FLUID_IN;
-        if (te instanceof MEFluidOutputBus) return HatchType.ME_FLUID_OUT;
-        if (te instanceof MEPatternProvider) return HatchType.ME_PATTERN_PROVIDER;
+        // Identify optional MMCE devices without resolving their legacy appeng superclasses.
+        String block = String.valueOf(te.getBlockType().getRegistryName());
+        switch (block) {
+            case "modularmachinery:blockmeiteminputbus": return HatchType.ME_ITEM_IN;
+            case "modularmachinery:blockmeitemoutputbus": return HatchType.ME_ITEM_OUT;
+            case "modularmachinery:blockmefluidinputbus": return HatchType.ME_FLUID_IN;
+            case "modularmachinery:blockmefluidoutputbus": return HatchType.ME_FLUID_OUT;
+            case "modularmachinery:blockmepatternprovider": return HatchType.ME_PATTERN_PROVIDER;
+        }
         if (te instanceof TileItemInputBus) return HatchType.ITEM_IN;
         if (te instanceof TileItemOutputBus) return HatchType.ITEM_OUT;
         if (CLAZZ_FLUID_INPUT != null && CLAZZ_FLUID_INPUT.isInstance(te)) return HatchType.FLUID_IN;
@@ -286,17 +282,13 @@ public final class HatchAdminManager {
 
     /** AE 网络状态：1 在线，0 离线/无频道，-1 非网络仓室。 */
     private static byte networkState(TileEntity te) {
-        if (!(te instanceof IGridProxyable)) {
-            return -1;
+        if (te instanceof ae2.me.helpers.IGridConnectedTile) {
+            return (byte) (((ae2.me.helpers.IGridConnectedTile) te).getMainNode().isActive() ? 1 : 0);
         }
-        try {
-            ((IGridProxyable) te).getProxy().getGrid();
-            return 1;
-        } catch (GridAccessException e) {
-            return 0;
-        } catch (Exception e) {
-            return 0;
-        }
+        var host = te.getCapability(AECapabilities.IN_WORLD_GRID_NODE_HOST, null);
+        if (host == null) return -1;
+        var node = host.getGridNode(null);
+        return (byte) (node != null && node.isActive() ? 1 : 0);
     }
 
     /** 各类仓室的缓存量统计（无缓存概念返回 -1）。 */
@@ -320,15 +312,11 @@ public final class HatchAdminManager {
             return assembly.getTotalBufferedInputItems() + assembly.getTotalBufferedInputFluids()
                     + assembly.getTotalBufferedOutputItems() + assembly.getTotalBufferedOutputFluids();
         }
-        if (te instanceof MEItemBus) {
-            return countInventory(((MEItemBus) te).getInternalInventory());
-        }
-        if (te instanceof MEFluidBus) {
-            return countAETanks(((MEFluidBus) te).getTanks());
-        }
         if (te instanceof TileInventory) {
             return countInventory(((TileInventory) te).getInventory());
         }
+        IItemHandler items = te.getCapability(CapabilityItemHandler.ITEM_HANDLER_CAPABILITY, null);
+        if (items != null) return countInventory(items);
         // MMCE 能源仓（编译期无法直接引用 TileEnergyHatch，走 Forge 能量 Capability）
         IEnergyStorage energy = te.getCapability(CapabilityEnergy.ENERGY, null);
         if (energy != null) {
@@ -349,27 +337,13 @@ public final class HatchAdminManager {
         return -1;
     }
 
-    private static long countInventory(@Nullable IOInventory inv) {
+    private static long countInventory(@Nullable IItemHandler inv) {
         if (inv == null) {
             return 0;
         }
         long sum = 0;
         for (int i = 0; i < inv.getSlots(); i++) {
             sum += inv.getStackInSlot(i).getCount();
-        }
-        return sum;
-    }
-
-    private static long countAETanks(@Nullable IAEFluidTank tanks) {
-        if (tanks == null) {
-            return 0;
-        }
-        long sum = 0;
-        for (int i = 0; i < tanks.getSlots(); i++) {
-            IAEFluidStack stack = tanks.getFluidInSlot(i);
-            if (stack != null) {
-                sum += stack.getStackSize();
-            }
         }
         return sum;
     }
@@ -414,21 +388,15 @@ public final class HatchAdminManager {
             }
             return cleared;
         }
-        if (te instanceof MEItemBus) {
-            return clearInventory(((MEItemBus) te).getInternalInventory());
-        }
-        if (te instanceof MEFluidBus) {
-            IAEFluidTank tanks = ((MEFluidBus) te).getTanks();
-            if (tanks != null) {
-                for (int i = 0; i < tanks.getSlots(); i++) {
-                    cleared |= tanks.getFluidInSlot(i) != null;
-                    tanks.setFluidInSlot(i, null);
-                }
-            }
-            return cleared;
-        }
         if (te instanceof TileInventory) {
             return clearInventory(((TileInventory) te).getInventory());
+        }
+        IItemHandler items = te.getCapability(CapabilityItemHandler.ITEM_HANDLER_CAPABILITY, null);
+        if (items != null) {
+            for (int i = 0; i < items.getSlots(); i++) {
+                cleared |= !items.extractItem(i, Integer.MAX_VALUE, false).isEmpty();
+            }
+            return cleared;
         }
         // 能源仓不清空：能量是瞬时资源而非积压缓存
         // MMCE 流体仓：走 Forge 流体 Capability 逐罐抽空

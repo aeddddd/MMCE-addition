@@ -1,7 +1,6 @@
 package com.github.aeddddd.mmceaddition.tile.slot;
 
-import appeng.api.networking.crafting.ICraftingPatternDetails;
-import appeng.api.storage.data.IAEItemStack;
+import ae2.api.crafting.IPatternDetails;
 import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
 import com.github.aeddddd.mmceaddition.util.*;
 import net.minecraft.item.ItemStack;
@@ -28,7 +27,7 @@ public class PatternAssemblySlot implements IBufferObserver {
 
     // 原始样板（玩家编码的 1x 样板）
     @Nullable
-    private ICraftingPatternDetails patternDetails;
+    private IPatternDetails patternDetails;
 
     // 输入缓冲：AE pushPattern 写入，机器配方消耗
     private final LongItemBuffer inputItemBuffer;
@@ -77,11 +76,11 @@ public class PatternAssemblySlot implements IBufferObserver {
     }
 
     @Nullable
-    public ICraftingPatternDetails getPatternDetails() {
+    public IPatternDetails getPatternDetails() {
         return patternDetails;
     }
 
-    public void setPatternDetails(@Nullable ICraftingPatternDetails patternDetails) {
+    public void setPatternDetails(@Nullable IPatternDetails patternDetails) {
         this.patternDetails = patternDetails;
     }
 
@@ -208,10 +207,12 @@ public class PatternAssemblySlot implements IBufferObserver {
     @Override
     public void onBufferNonEmpty() {
         // 输出缓冲非空时通知异步输出管理器
-        if (owner != null && !owner.getWorld().isRemote) {
+        if (owner != null && owner.getWorld() != null && !owner.getWorld().isRemote) {
             owner.markOutputDirty(this);
         }
     }
+
+    @Override public void onBufferChanged() { if (owner != null) owner.markDirty(); }
 
     // ==================== NBT 序列化 ====================
 
