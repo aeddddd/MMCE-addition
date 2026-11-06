@@ -4,7 +4,10 @@ import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.gui.ContainerBufferView.Entry;
 import com.github.aeddddd.mmceaddition.network.PacketHandler;
 import com.github.aeddddd.mmceaddition.network.PktBufferViewClick;
+import com.github.aeddddd.mmceaddition.network.PktBufferViewReturn;
 import com.github.aeddddd.mmceaddition.network.PktBufferViewScroll;
+import com.github.aeddddd.mmceaddition.tile.TileInputAssembly;
+import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderHelper;
@@ -50,6 +53,8 @@ public class GuiBufferView extends GuiContainer {
     private boolean dragging = false;
     /** 上次已发送的滚动偏移，避免拖动时重复发包。 */
     private int lastSentScroll = -1;
+    /** "返还至相邻接口"按钮，仅输入总成显示。 */
+    private GuiButton returnButton;
 
     public GuiBufferView(TileEntity tile, ContainerBufferView container) {
         super(container);
@@ -57,6 +62,23 @@ public class GuiBufferView extends GuiContainer {
         this.container2 = container;
         this.xSize = 194;
         this.ySize = 198;
+    }
+
+    @Override
+    public void initGui() {
+        super.initGui();
+        if (tile instanceof TileInputAssembly) {
+            returnButton = new GuiButton(0, guiLeft + 102, guiTop + 91, 84, 14,
+                    I18n.format("gui.bufferview.return"));
+            buttonList.add(returnButton);
+        }
+    }
+
+    @Override
+    protected void actionPerformed(GuiButton button) {
+        if (button == returnButton) {
+            PacketHandler.INSTANCE.sendToServer(new PktBufferViewReturn(container2.getPos()));
+        }
     }
 
     // ==================== 绘制 ====================
@@ -98,6 +120,9 @@ public class GuiBufferView extends GuiContainer {
         drawEntries();
         GlStateManager.popMatrix();
         renderHoveredToolTip(mouseX, mouseY);
+        if (returnButton != null && returnButton.isMouseOver()) {
+            drawHoveringText(I18n.format("gui.bufferview.return.tooltip"), mouseX, mouseY);
+        }
     }
 
     /** 网格条目：物品图标或流体图标 + Long 数量角标（0.5 倍缩放右下角）。 */

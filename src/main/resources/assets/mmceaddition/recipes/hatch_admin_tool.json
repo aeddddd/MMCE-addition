@@ -1,0 +1,24 @@
+{
+    "result": {
+        "item": "mmceaddition:hatch_admin_tool"
+    },
+    "pattern": [
+        "c",
+        "p",
+        "m"
+    ],
+    "type": "forge:ore_shaped",
+    "key": {
+        "c": {
+            "item": "modularmachinery:blockcasing",
+            "data": 5
+        },
+        "p": {
+            "item": "appliedenergistics2:material",
+            "data": 24
+        },
+        "m": {
+            "item": "modularmachinery:itemmodularium"
+        }
+    }
+}

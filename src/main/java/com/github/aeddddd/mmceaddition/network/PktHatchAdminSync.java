@@ -6,6 +6,7 @@ import com.github.aeddddd.mmceaddition.manager.HatchProfiler;
 import com.github.aeddddd.mmceaddition.manager.MEAsyncOutputManager;
 import com.github.aeddddd.mmceaddition.manager.ServerTickMonitor;
 import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.DecoderException;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraftforge.fml.common.network.ByteBufUtils;
@@ -30,6 +31,17 @@ import java.util.List;
  * </ul>
  */
 public class PktHatchAdminSync implements IMessage {
+
+    /** 各类历史数组允许的最大长度（正常为几百项；超出即视为畸形包）。 */
+    private static final int MAX_ARRAY_LENGTH = 4096;
+    /** 单次同步允许的最大条目数（与服务端 {@link HatchAdminManager#MAX_ENTRIES} 一致）。 */
+    private static final int MAX_ENTRY_COUNT = HatchAdminManager.MAX_ENTRIES;
+    /**
+     * 单个条目序列化的保守最小字节数（实测空名空图标为 37：坐标 8 + 维度 4 + 3 个状态字节
+     * + 两个 long + 两个 VarInt 串长 1+1 + meta 4）。这里刻意取更小的值，
+     * 宁可少省一点校验也不能误杀合法包；真正的分配上限由 {@link #MAX_ENTRY_COUNT} 兜底。
+     */
+    private static final int MIN_ENTRY_BYTES = 32;
 
     /** 性能采样是否开启。 */
     public boolean profilerEnabled;
@@ -173,6 +185,10 @@ public class PktHatchAdminSync implements IMessage {
         onlineCount = buf.readInt();
         offlineCount = buf.readInt();
         int count = buf.readInt();
+        if (count < 0 || count > MAX_ENTRY_COUNT || buf.readableBytes() < (long) count * MIN_ENTRY_BYTES) {
+            throw new DecoderException("畸形的 " + PktHatchAdminSync.class.getSimpleName()
+                    + " 条目数: " + count + "（剩余可读字节 " + buf.readableBytes() + "）");
+        }
         entries = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             EntryData data = new EntryData();
@@ -240,7 +256,7 @@ public class PktHatchAdminSync implements IMessage {
     }
 
     private static int[] readIntArray(ByteBuf buf) {
-        int[] out = new int[buf.readInt()];
+        int[] out = new int[readArrayLength(buf, Integer.BYTES)];
         for (int i = 0; i < out.length; i++) {
             out[i] = buf.readInt();
         }
@@ -255,11 +271,27 @@ public class PktHatchAdminSync implements IMessage {
     }
 
     private static long[] readLongArray(ByteBuf buf) {
-        long[] out = new long[buf.readInt()];
+        long[] out = new long[readArrayLength(buf, Long.BYTES)];
         for (int i = 0; i < out.length; i++) {
             out[i] = buf.readLong();
         }
         return out;
+    }
+
+    /**
+     * 读取数组长度并校验，畸形长度直接抛异常让 Forge/Netty 丢弃该包。
+     * <p>
+     * 负数、超过 {@link #MAX_ARRAY_LENGTH}、或所需字节数超过剩余可读字节，
+     * 都意味着发送端与我们版本不符或包被伪造，绝不可据此分配数组（否则 OOM / AIOOBE）。
+     */
+    private static int readArrayLength(ByteBuf buf, int elementBytes) {
+        int length = buf.readInt();
+        if (length < 0 || length > MAX_ARRAY_LENGTH
+                || buf.readableBytes() < (long) length * elementBytes) {
+            throw new DecoderException("畸形的 " + PktHatchAdminSync.class.getSimpleName()
+                    + " 数组长度: " + length + "（剩余可读字节 " + buf.readableBytes() + "）");
+        }
+        return length;
     }
 
     public static class Handler implements IMessageHandler<PktHatchAdminSync, IMessage> {

@@ -1,0 +1,20 @@
+{
+    "result": {
+        "item": "mmceaddition:me_async_item_output_bus"
+    },
+    "pattern": [
+        "m",
+        "p"
+    ],
+    "type": "forge:ore_shaped",
+    "key": {
+        "m": {
+            "item": "modularmachinery:blockoutputbus",
+            "data": 0
+        },
+        "p": {
+            "item": "appliedenergistics2:material",
+            "data": 24
+        }
+    }
+}

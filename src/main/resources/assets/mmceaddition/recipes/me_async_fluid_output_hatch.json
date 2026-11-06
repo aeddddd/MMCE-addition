@@ -1,0 +1,20 @@
+{
+    "result": {
+        "item": "mmceaddition:me_async_fluid_output_hatch"
+    },
+    "pattern": [
+        "m",
+        "p"
+    ],
+    "type": "forge:ore_shaped",
+    "key": {
+        "m": {
+            "item": "modularmachinery:blockfluidoutputhatch",
+            "data": 0
+        },
+        "p": {
+            "item": "appliedenergistics2:material",
+            "data": 24
+        }
+    }
+}

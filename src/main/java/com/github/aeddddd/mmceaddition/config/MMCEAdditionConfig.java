@@ -296,6 +296,17 @@ public class MMCEAdditionConfig {
     public static boolean debugRecipeSummation = false;
 
     /**
+     * 是否输出仓室管理工具的调试日志。
+     * <p>
+     * 开启后，服务端会记录被拒绝的仓室管理网络包（发送者未手持工具、请求被限流）。
+     * 非法 action 值属于异常/攻击信号，无论本开关如何都会记录一条 warn。
+     */
+    @Config.Name("debug_hatch_admin")
+    @Config.Comment("输出仓室管理工具的调试日志（被服务端拒绝的未手持工具/被限流请求）")
+    @Config.LangKey("config.mmceaddition.debug_hatch_admin")
+    public static boolean debugHatchAdmin = false;
+
+    /**
      * 配置变更事件处理器。
      * <p>
      * 当玩家在游戏内点击“Done”保存配置时，Forge 会触发 {@link ConfigChangedEvent.OnConfigChangedEvent}。

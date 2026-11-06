@@ -49,6 +49,7 @@ ae2uel_extract/
 decompiled/
 cfr-*.jar
 run/
+logs/
 libs/
 *.xml
 .idea/
@@ -58,5 +59,10 @@ tmp*/
 *_ref/
 docs/
 *.json
+# 例外的 JSON 是模组资产的一部分，必须入库：
+# blockstate / 方块与物品模型 / 配方 / 语言文件之外的资源清单。
+# 否则新加的资源会被 *.json 静默忽略，克隆仓库后得到缺模型的紫黑方块。
+!src/main/resources/**/*.json
+!src/test/resources/**/*.json
 *.md
 !README.md

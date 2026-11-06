@@ -52,9 +52,17 @@ public class MMCEAddition implements ILateMixinLoader {
     public static final String NAME = "MMCE Addition";
 
     /**
-     * 模组版本号。构建时 processResources 任务会把这里和 mcmod.info 里的占位符替换掉。
+     * 模组版本号。
+     * <p>
+     * {@code build.gradle} 的 {@code version} 是版本号的唯一来源，但 {@link Mod} 注解
+     * 要求编译期字符串常量、无法引用 Gradle 变量，所以这里必须重复书写一次。
+     * 构建脚本中的 {@code verifyVersionConsistency} 任务会在 {@code compileJava} 之前
+     * 校验两者一致，不一致就直接让构建失败，避免再次出现版本漂移。
+     * <p>
+     * 注意：{@code processResources} 只会展开 {@code mcmod.info} 里的 {@code ${version}}
+     * 占位符，<b>不会</b>改写本常量。
      */
-    public static final String VERSION = "1.4.4";
+    public static final String VERSION = "1.4.6";
 
     /**
      * 模组日志记录器。

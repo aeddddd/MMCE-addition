@@ -1,0 +1,6 @@
+{
+  "variants": {
+    "normal": { "model": "mmceaddition:input_assembly" },
+    "inventory": { "model": "mmceaddition:input_assembly" }
+  }
+}

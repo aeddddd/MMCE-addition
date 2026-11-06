@@ -2,7 +2,7 @@
   {
     "modid": "mmceaddition",
     "name": "MMCE Addition",
-    "description": "Async ME output components for ModularMachinery Community Edition.",
+    "description": "Performance and automation add-on for ModularMachinery Community Edition: async ME item/fluid output components, ME pattern and input/output assemblies, fake-parallel migration, a virtual parallel hatch and virtual assembler, recipe output summation, network-resource providers, and in-game hatch management plus profiling tools.",
     "version": "${version}",
     "mcversion": "${mcversion}",
     "url": "",

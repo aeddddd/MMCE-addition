@@ -1,0 +1,29 @@
+{
+    "result": {
+        "item": "mmceaddition:virtual_assembler"
+    },
+    "pattern": [
+        " r ",
+        "dmd",
+        " g "
+    ],
+    "type": "forge:ore_shaped",
+    "key": {
+        "r": {
+            "type": "forge:ore_dict",
+            "ore": "blockRedstone"
+        },
+        "d": {
+            "type": "forge:ore_dict",
+            "ore": "gemDiamond"
+        },
+        "g": {
+            "type": "forge:ore_dict",
+            "ore": "ingotGold"
+        },
+        "m": {
+            "item": "modularmachinery:blockcasing",
+            "data": 0
+        }
+    }
+}

@@ -1,0 +1,6 @@
+{
+  "variants": {
+    "normal": { "model": "mmceaddition:me_pattern_assembly" },
+    "inventory": { "model": "mmceaddition:me_pattern_assembly" }
+  }
+}

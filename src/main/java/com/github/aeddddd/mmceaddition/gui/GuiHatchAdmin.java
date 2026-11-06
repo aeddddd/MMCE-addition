@@ -396,7 +396,11 @@ public class GuiHatchAdmin extends GuiScreen {
         StringBuilder sb = new StringBuilder();
         sb.append("§8[§b").append(dimName(e.dim)).append("§8] §7")
                 .append(e.pos.getX()).append(',').append(e.pos.getY()).append(',').append(e.pos.getZ());
-        sb.append(" §8| §7").append(I18n.format(HatchType.values()[e.typeOrdinal].langKey()));
+        // 类型序号来自网络包，畸形/版本不符时可能越界：越界就跳过该段，不让客户端崩溃
+        HatchType[] types = HatchType.values();
+        if (e.typeOrdinal >= 0 && e.typeOrdinal < types.length) {
+            sb.append(" §8| §7").append(I18n.format(types[e.typeOrdinal].langKey()));
+        }
         if (e.autoIO >= 0) {
             sb.append(" §8| ").append(e.autoIO == 1
                     ? "§a" + I18n.format("gui.hatchadmin.status.io_on")

@@ -4,6 +4,9 @@ import appeng.api.storage.data.IAEFluidStack;
 import appeng.fluids.util.IAEFluidTank;
 import appeng.me.GridAccessException;
 import appeng.me.helpers.IGridProxyable;
+import com.github.aeddddd.mmceaddition.MMCEAddition;
+import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
+import com.github.aeddddd.mmceaddition.item.ItemHatchAdminTool;
 import com.github.aeddddd.mmceaddition.tile.TileInputAssembly;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncFluidOutputHatch;
 import com.github.aeddddd.mmceaddition.tile.TileMEAsyncItemOutputBus;
@@ -24,8 +27,10 @@ import hellfirepvp.modularmachinery.common.tiles.base.TileInventory;
 import hellfirepvp.modularmachinery.common.tiles.base.TileMultiblockMachineController;
 import hellfirepvp.modularmachinery.common.util.IOInventory;
 import net.minecraft.block.state.IBlockState;
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.EnumHand;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
@@ -39,8 +44,13 @@ import net.minecraftforge.fluids.capability.IFluidTankProperties;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * 全局仓室管理器（服务端数据源）。
@@ -473,6 +483,157 @@ public final class HatchAdminManager {
                 entries.sort(Comparator.comparingInt((Entry e) -> e.type.ordinal())
                         .thenComparing(e -> e.name));
                 break;
+        }
+    }
+
+    // ==================== 服务端权威校验（网络包入口用） ====================
+    //
+    // 仓室管理工具是纯客户端 GUI，没有 Container / IInteractionObject，
+    // 无法像样板总成那样用「openContainer + 坐标比对」校验，
+    // 因此三个 C → S 包唯一的身份凭证是「发送者手中确实拿着该工具」。
+
+    /** 限流槽位：扫描请求（{@link #scan} 会遍历全部已加载区块，最贵）。 */
+    public static final int RATE_SCAN = 0;
+    /** 限流槽位：批量操作（自动 IO 开关 / 清空缓存）。 */
+    public static final int RATE_ACTION = 1;
+    /** 限流槽位：性能采样开关（全局开关，影响面大）。 */
+    public static final int RATE_PROFILER = 2;
+
+    /** 各限流槽位的最小允许间隔（tick）。 */
+    private static final int[] RATE_INTERVALS = {20, 10, 20};
+
+    /** 限流表：玩家 UUID → 各槽位上次通过校验时的总世界时间。仅在服务端主线程访问。 */
+    private static final Map<UUID, long[]> RATE_TABLE = new HashMap<>();
+
+    /** 超过该 tick 数未活跃的限流条目视为过期，可被清理（5 分钟）。 */
+    private static final long RATE_IDLE_TICKS = 6000;
+
+    /** 限流表硬上限：即使有大量不同 UUID 的玩家涌入也不会无界增长。 */
+    private static final int RATE_TABLE_MAX = 256;
+
+    /** 清理限流表的最小间隔（tick）：把清理开销摊销，避免每个包都遍历全表。 */
+    private static final long RATE_TRIM_INTERVAL = 600;
+
+    /** 上次清理限流表的总世界时间。 */
+    private static long lastTrimTick = -RATE_TRIM_INTERVAL;
+
+    /**
+     * 发送者是否手持仓室管理工具（主手或副手任一即可）。
+     * <p>
+     * 三个 C → S 包（扫描请求 / 批量操作 / 采样开关）都以此为服务端权威前提。
+     */
+    public static boolean isHoldingAdminTool(@Nullable EntityPlayerMP player) {
+        if (player == null) {
+            return false;
+        }
+        return isAdminTool(player.getHeldItem(EnumHand.MAIN_HAND))
+                || isAdminTool(player.getHeldItem(EnumHand.OFF_HAND));
+    }
+
+    private static boolean isAdminTool(@Nullable ItemStack stack) {
+        return stack != null && !stack.isEmpty() && stack.getItem() instanceof ItemHatchAdminTool;
+    }
+
+    /**
+     * 类型掩码白名单钳制：只保留 {@link HatchType#ALL_MASK} 内已定义的位，越界位一律抹掉。
+     * <p>
+     * 抹掉后为 0 表示「不匹配任何仓室」，不会被扩大成全部仓室。
+     */
+    public static int sanitizeTypeMask(int typeMask) {
+        return typeMask & HatchType.ALL_MASK;
+    }
+
+    /** 网络过滤白名单钳制：越界值退化为 {@link #NET_ALL}。 */
+    public static int sanitizeNetFilter(int netFilter) {
+        return netFilter == NET_ONLINE || netFilter == NET_OFFLINE ? netFilter : NET_ALL;
+    }
+
+    /** 排序白名单钳制：越界值退化为 {@link #SORT_TYPE}。 */
+    public static int sanitizeSortBy(int sortBy) {
+        return sortBy == SORT_BUFFERED || sortBy == SORT_TICK_TIME ? sortBy : SORT_TYPE;
+    }
+
+    /**
+     * 限流判定：间隔未到返回 {@code false}（调用方应直接丢弃该包，不回包、不执行）。
+     * <p>
+     * 必须在服务端主线程调用（网络包处理器 {@code addScheduledTask} 内），
+     * 这样限流表天然单线程访问，无需加锁。
+     *
+     * @param slot {@link #RATE_SCAN} / {@link #RATE_ACTION} / {@link #RATE_PROFILER}
+     */
+    public static boolean allowRate(@Nullable EntityPlayerMP player, int slot) {
+        if (player == null || slot < 0 || slot >= RATE_INTERVALS.length) {
+            return false;
+        }
+        long now = player.getServerWorld().getTotalWorldTime();
+        trimRateTable(now);
+        UUID id = player.getUniqueID();
+        long[] stamps = RATE_TABLE.get(id);
+        if (stamps == null) {
+            stamps = new long[RATE_INTERVALS.length];
+            // 初次请求一律放行：直接视作「早在很久以前通过过校验」
+            Arrays.fill(stamps, now - RATE_IDLE_TICKS);
+            RATE_TABLE.put(id, stamps);
+        }
+        long delta = now - stamps[slot];
+        // delta < 0 说明世界时间计数回退（换维度等），按放行处理，避免把玩家永久卡死
+        if (delta >= 0 && delta < RATE_INTERVALS[slot]) {
+            if (MMCEAdditionConfig.debugHatchAdmin) {
+                MMCEAddition.LOGGER.info("仓室管理请求被限流：player={} slot={} delta={}",
+                        player.getName(), slot, delta);
+            }
+            return false;
+        }
+        stamps[slot] = now;
+        return true;
+    }
+
+    /**
+     * 限流表的有界化：最多每 {@link #RATE_TRIM_INTERVAL} tick 清理一次，
+     * 移除全部槽位都超过 {@link #RATE_IDLE_TICKS} 未活跃的条目；
+     * 若条目数仍达到硬上限 {@link #RATE_TABLE_MAX}，则淘汰最久未活跃者。
+     */
+    private static void trimRateTable(long now) {
+        if (RATE_TABLE.isEmpty()) {
+            return;
+        }
+        if (RATE_TABLE.size() < RATE_TABLE_MAX && now - lastTrimTick < RATE_TRIM_INTERVAL) {
+            return;
+        }
+        lastTrimTick = now;
+        Iterator<Map.Entry<UUID, long[]>> it = RATE_TABLE.entrySet().iterator();
+        while (it.hasNext()) {
+            long[] stamps = it.next().getValue();
+            boolean idle = true;
+            for (long stamp : stamps) {
+                if (now - stamp <= RATE_IDLE_TICKS) {
+                    idle = false;
+                    break;
+                }
+            }
+            if (idle) {
+                it.remove();
+            }
+        }
+        while (RATE_TABLE.size() >= RATE_TABLE_MAX) {
+            UUID oldestId = null;
+            long oldest = Long.MAX_VALUE;
+            for (Map.Entry<UUID, long[]> entry : RATE_TABLE.entrySet()) {
+                long last = Long.MIN_VALUE;
+                for (long stamp : entry.getValue()) {
+                    if (stamp > last) {
+                        last = stamp;
+                    }
+                }
+                if (last < oldest) {
+                    oldest = last;
+                    oldestId = entry.getKey();
+                }
+            }
+            if (oldestId == null) {
+                return;
+            }
+            RATE_TABLE.remove(oldestId);
         }
     }
 }

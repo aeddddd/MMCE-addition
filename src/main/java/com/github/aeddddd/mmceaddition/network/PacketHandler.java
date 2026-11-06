@@ -22,6 +22,8 @@ public class PacketHandler {
                 PktMEPatternAssemblyBufferCounts.class, id++, Side.CLIENT);
         INSTANCE.registerMessage(PktMEPatternAssemblyFluidBuffers.Handler.class,
                 PktMEPatternAssemblyFluidBuffers.class, id++, Side.CLIENT);
+        INSTANCE.registerMessage(PktMEPatternAssemblyReturn.Handler.class,
+                PktMEPatternAssemblyReturn.class, id++, Side.SERVER);
         INSTANCE.registerMessage(PktVirtualAssemblerSelect.Handler.class,
                 PktVirtualAssemblerSelect.class, id++, Side.SERVER);
         INSTANCE.registerMessage(PktVirtualAssemble.Handler.class,
@@ -34,6 +36,8 @@ public class PacketHandler {
                 PktBufferViewScroll.class, id++, Side.SERVER);
         INSTANCE.registerMessage(PktBufferViewClick.Handler.class,
                 PktBufferViewClick.class, id++, Side.SERVER);
+        INSTANCE.registerMessage(PktBufferViewReturn.Handler.class,
+                PktBufferViewReturn.class, id++, Side.SERVER);
         INSTANCE.registerMessage(PktBufferViewSync.Handler.class,
                 PktBufferViewSync.class, id++, Side.CLIENT);
         INSTANCE.registerMessage(PktHatchAdminRequest.Handler.class,

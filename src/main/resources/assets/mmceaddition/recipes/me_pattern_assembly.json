@@ -1,0 +1,19 @@
+{
+    "result": {
+        "item": "mmceaddition:me_pattern_assembly"
+    },
+    "pattern": [
+        "c",
+        "m",
+        "c"
+    ],
+    "type": "forge:ore_shaped",
+    "key": {
+        "m": {
+            "item": "modularmachinery:blockmepatternprovider"
+        },
+        "c": {
+            "item": "appliedenergistics2:crafting_unit"
+        }
+    }
+}

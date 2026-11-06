@@ -181,8 +181,12 @@ public class LongItemBuffer {
                 continue;
             }
             // 先把 Count 改回 1，让 new ItemStack(tag) 能正常反序列化物品类型。
-            tag.setInteger("Count", 1);
-            ItemStack stack = new ItemStack(tag);
+            // 必须复制后再改：NBTTagList.getCompoundTagAt 返回的是列表持有的活引用，
+            // 就地改写会把调用方的 NBT 也改坏——同一个 compound 第二次读入时
+            // 每个变体的数量都会变成 1，超 long/int 上限的大数量随之丢失。
+            NBTTagCompound itemTag = tag.copy();
+            itemTag.setInteger("Count", 1);
+            ItemStack stack = new ItemStack(itemTag);
             if (stack.isEmpty()) {
                 continue;
             }

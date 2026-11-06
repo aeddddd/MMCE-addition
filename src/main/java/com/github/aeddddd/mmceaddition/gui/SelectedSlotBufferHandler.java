@@ -8,6 +8,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraftforge.items.IItemHandlerModifiable;
 
 import javax.annotation.Nonnull;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -220,11 +221,21 @@ public class SelectedSlotBufferHandler implements IItemHandlerModifiable {
         if (index >= entries.size()) {
             return null;
         }
-        entries.sort(Comparator.comparing(e -> {
-            ItemStack stack = e.getKey().toSingleStack();
-            String nbt = stack.hasTagCompound() ? stack.getTagCompound().toString() : "";
-            return stack.getTranslationKey() + ":" + stack.getMetadata() + ":" + nbt;
-        }));
-        return entries.get(index);
+        // 先为每个变体算好排序键再排序。原实现把键的计算放在 Comparator 里，
+        // 每次比较都会重建 ItemStack 并把 NBT 序列化成字符串（O(n log n) 次），
+        // 而本方法会被 Container.detectAndSendChanges 每 tick 对每个缓冲槽调用一次。
+        List<Map.Entry<String, Map.Entry<ItemVariant, Long>>> keyed = new ArrayList<>(entries.size());
+        for (Map.Entry<ItemVariant, Long> entry : entries) {
+            keyed.add(new AbstractMap.SimpleImmutableEntry<>(sortKey(entry.getKey()), entry));
+        }
+        keyed.sort(Comparator.comparing(entry -> entry.getKey()));
+        return keyed.get(index).getValue();
+    }
+
+    /** 变体的稳定排序键，与历史排序规则一致：翻译键 + meta + NBT 字符串。 */
+    private static String sortKey(ItemVariant variant) {
+        ItemStack stack = variant.toSingleStack();
+        String nbt = stack.hasTagCompound() ? stack.getTagCompound().toString() : "";
+        return stack.getTranslationKey() + ":" + stack.getMetadata() + ":" + nbt;
     }
 }

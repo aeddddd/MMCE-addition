@@ -65,6 +65,31 @@ public class LongFluidBuffer {
     }
 
     /**
+     * 只读判定：把给定的一组流体堆全部填充是否会完整成功（不修改状态、不触发观察者）。
+     * <p>
+     * 单种流体的容量上限是 {@link Long#MAX_VALUE}（见 {@link #fill} 的溢出分支），
+     * 只有累计量逼近该上限时 {@link #fill} 才会只接受一部分。
+     *
+     * @param resources 待填充的流体堆（可含 null 与空堆）
+     * @return true 表示全部可完整接收
+     */
+    public synchronized boolean wouldAcceptAll(@Nonnull FluidStack[] resources) {
+        Map<Fluid, Long> pending = new HashMap<>();
+        for (FluidStack resource : resources) {
+            if (resource == null || resource.amount <= 0) {
+                continue;
+            }
+            Fluid fluid = resource.getFluid();
+            long current = storage.getOrDefault(fluid, 0L) + pending.getOrDefault(fluid, 0L);
+            if (Long.MAX_VALUE - current < resource.amount) {
+                return false;
+            }
+            pending.put(fluid, pending.getOrDefault(fluid, 0L) + resource.amount);
+        }
+        return true;
+    }
+
+    /**
      * 从缓冲区抽取流体，返回实际抽取量。
      */
     public synchronized long extract(@Nonnull Fluid fluid, long amount) {

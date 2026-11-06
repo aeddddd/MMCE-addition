@@ -1,9 +1,11 @@
 package com.github.aeddddd.mmceaddition.gui;
 
 import com.github.aeddddd.mmceaddition.network.PacketHandler;
+import com.github.aeddddd.mmceaddition.network.PktMEPatternAssemblyReturn;
 import com.github.aeddddd.mmceaddition.network.PktMEPatternAssemblyScroll;
 import com.github.aeddddd.mmceaddition.network.PktMEPatternAssemblySelect;
 import com.github.aeddddd.mmceaddition.tile.TileMEPatternAssembly;
+import net.minecraft.client.gui.GuiButton;
 import org.lwjgl.input.Mouse;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.inventory.GuiContainer;
@@ -70,11 +72,20 @@ public class GuiMEPatternAssembly extends GuiContainer {
     private static final int MODE_BTN_W = 22;
     private static final int MODE_BTN_H = 11;
 
+    /** "返还全部输入到 ME 网络"按钮的区域（相对 GUI 左上角，样板槽上方的空白条带）。 */
+    private static final int RETURN_BTN_X = 100;
+    private static final int RETURN_BTN_Y = 8;
+    private static final int RETURN_BTN_W = 70;
+    private static final int RETURN_BTN_H = 14;
+
     private final TileMEPatternAssembly assembly;
     private final ContainerMEPatternAssembly container;
 
     /** 缓冲面板视图模式：false=物品缓冲，true=流体缓冲（纯客户端状态）。 */
     private boolean fluidMode = false;
+
+    /** "返还全部输入到 ME 网络"按钮（服务端权威执行，见 PktMEPatternAssemblyReturn）。 */
+    private GuiButton returnButton;
 
     public GuiMEPatternAssembly(TileMEPatternAssembly assembly, ContainerMEPatternAssembly container) {
         super(container);
@@ -82,6 +93,21 @@ public class GuiMEPatternAssembly extends GuiContainer {
         this.container = container;
         this.xSize = GUI_WIDTH;
         this.ySize = GUI_HEIGHT;
+    }
+
+    @Override
+    public void initGui() {
+        super.initGui();
+        returnButton = new GuiButton(0, guiLeft + RETURN_BTN_X, guiTop + RETURN_BTN_Y,
+                RETURN_BTN_W, RETURN_BTN_H, I18n.format("gui.mepatternassembly.return"));
+        buttonList.add(returnButton);
+    }
+
+    @Override
+    protected void actionPerformed(GuiButton button) {
+        if (button == returnButton) {
+            PacketHandler.INSTANCE.sendToServer(new PktMEPatternAssemblyReturn(assembly.getPos()));
+        }
     }
 
     @Override
@@ -192,6 +218,10 @@ public class GuiMEPatternAssembly extends GuiContainer {
             drawBufferCountOverlays();
         }
         drawBufferScrollbar();
+        // "返还全部输入"按钮由 GuiButton 自行绘制，这里只补上按钮悬停提示
+        if (returnButton != null && returnButton.isMouseOver()) {
+            drawHoveringText(I18n.format("gui.mepatternassembly.return.tooltip"), mouseX, mouseY);
+        }
         renderHoveredToolTip(mouseX, mouseY);
     }
 

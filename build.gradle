@@ -20,7 +20,9 @@ buildscript {
 apply plugin: 'net.minecraftforge.gradle.forge'
 
 // 模组版本、Maven 坐标、构建产物名。
-version = '1.4.4'
+// 这里的 version 是本模组版本号的唯一来源；MMCEAddition.VERSION 必须与之保持一致，
+// 由文件末尾的 verifyVersionConsistency 任务在编译前强制校验。
+version = '1.4.6'
 group = 'com.github.aeddddd'
 archivesBaseName = 'MMCE-addition'
 
@@ -100,6 +102,29 @@ dependencies {
 
 test {
     useJUnitPlatform()
+
+    // 测试 JVM 里没有 FML 的运行时反混淆器，而 libs/ 中的模组 jar 引用的是 SRG 名
+    // （例如 ItemStack.EMPTY 在原始 jar 里写作 field_190927_a）。
+    // 直接用原始 jar 会在加载 MMCE 的类时抛 NoSuchFieldError，
+    // 因此把 ForgeGradle 生成的反混淆副本放到 classpath 最前面（同名类优先取反混淆版）。
+    // 副本不存在时（例如尚未执行过反混淆任务）保持原样，测试退化为只覆盖不依赖 MMCE 的类。
+    doFirst {
+        def deobfRoot = new File(gradle.gradleUserHomeDir, 'caches/minecraft/deobfedDeps/deobf')
+        // 排除未在 dependencies 里声明的 ModularMachinery-CE-2.2.2：构建目标是 2.3.2，
+        // 而 2.2.2 按字母序排在前面，会把 2.3.2 的类盖住，让测试对着旧的 MMCE API 跑。
+        // 若日后删除 libs/ 中的 2.2.2 jar，本过滤条件自动失效、无需同步。
+        def deobfJars = fileTree('libs') {
+            include '*.jar'
+            exclude 'ModularMachinery-CE-2.2.2*.jar'
+        }.files.collect { raw ->
+            def base = raw.name.replaceFirst(/\.jar$/, '')
+            new File(deobfRoot, base + '/' + base + '-.jar')
+        }.findAll { it.isFile() }
+        if (!deobfJars.isEmpty()) {
+            logger.lifecycle("测试使用反混淆依赖：" + deobfJars.collect { it.name }.join(', '))
+            classpath = files(deobfJars) + classpath
+        }
+    }
 }
 
 // 处理资源文件。
@@ -119,3 +144,26 @@ processResources {
         exclude 'mcmod.info'
     }
 }
+
+// ============================================================
+// 版本一致性校验
+// ============================================================
+// build.gradle 的 version 是版本号的唯一来源，但 @Mod 注解要求编译期字符串常量，
+// 因此 MMCEAddition.VERSION 必须重复书写一次。历史上这里漂移过
+//（build.gradle 1.4.5 / 常量 1.4.4 / 产物 1.4.5.1），故在编译前强制校验。
+task verifyVersionConsistency {
+    doLast {
+        def modMainFile = file('src/main/java/com/github/aeddddd/mmceaddition/MMCEAddition.java')
+        if (!modMainFile.exists()) {
+            throw new GradleException("找不到 MMCEAddition.java，无法校验版本一致性：${modMainFile}")
+        }
+        def expected = "VERSION = \"${project.version}\""
+        if (!modMainFile.getText('UTF-8').contains(expected)) {
+            throw new GradleException(
+                    "版本不一致：build.gradle 的 version=${project.version}，" +
+                    "但 MMCEAddition.java 里没有 ${expected}。请把该常量同步为 ${project.version}。")
+        }
+    }
+}
+
+compileJava.dependsOn verifyVersionConsistency

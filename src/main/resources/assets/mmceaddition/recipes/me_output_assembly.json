@@ -1,0 +1,23 @@
+{
+    "result": {
+        "item": "mmceaddition:me_output_assembly"
+    },
+    "pattern": [
+        "i",
+        "f",
+        "e"
+    ],
+    "type": "forge:ore_shaped",
+    "key": {
+        "i": {
+            "item": "mmceaddition:me_async_item_output_bus"
+        },
+        "f": {
+            "item": "mmceaddition:me_async_fluid_output_hatch"
+        },
+        "e": {
+            "item": "modularmachinery:blockenergyinputhatch",
+            "data": 0
+        }
+    }
+}

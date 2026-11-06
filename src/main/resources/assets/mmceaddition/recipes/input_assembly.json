@@ -1,0 +1,20 @@
+{
+    "result": {
+        "item": "mmceaddition:input_assembly"
+    },
+    "pattern": [
+        "i",
+        "f"
+    ],
+    "type": "forge:ore_shaped",
+    "key": {
+        "i": {
+            "item": "modularmachinery:blockinputbus",
+            "data": 0
+        },
+        "f": {
+            "item": "modularmachinery:blockfluidinputhatch",
+            "data": 0
+        }
+    }
+}

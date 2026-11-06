@@ -1,10 +1,20 @@
 package com.github.aeddddd.mmceaddition.tile;
 
+import appeng.api.AEApi;
+import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingPatternDetails;
 import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.crafting.ICraftingProviderHelper;
+import appeng.api.networking.energy.IEnergyGrid;
+import appeng.api.networking.energy.IEnergySource;
 import appeng.api.networking.events.MENetworkCraftingPatternChange;
+import appeng.api.networking.storage.IStorageGrid;
+import appeng.api.storage.IMEMonitor;
+import appeng.api.storage.channels.IFluidStorageChannel;
+import appeng.api.storage.channels.IItemStorageChannel;
+import appeng.api.storage.data.IAEFluidStack;
 import appeng.api.storage.data.IAEItemStack;
+import appeng.fluids.util.AEFluidStack;
 import appeng.helpers.DualityInterface;
 import appeng.helpers.ICustomNameObject;
 import appeng.helpers.IInterfaceHost;
@@ -12,8 +22,10 @@ import appeng.me.GridAccessException;
 import appeng.me.helpers.AENetworkProxy;
 import appeng.api.networking.security.IActionSource;
 import appeng.tile.inventory.AppEngInternalInventory;
+import appeng.util.Platform;
 import appeng.util.inv.IAEAppEngInventory;
 import appeng.util.inv.InvOperation;
+import appeng.util.item.AEItemStack;
 import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.RegistryHandler;
 import com.github.aeddddd.mmceaddition.compat.NetworkEnergyCompat;
@@ -516,14 +528,39 @@ public class TileMEPatternAssembly extends MEMachineComponent
                 inputs.add(stack);
             }
         }
-        slot.pushPattern(inputs.toArray(new ItemStack[0]));
-        if (!fluidInputs.isEmpty()) {
-            slot.pushPatternFluid(fluidInputs.toArray(new FluidStack[0]));
+        ItemStack[] itemInputs = inputs.toArray(new ItemStack[0]);
+        FluidStack[] decodedFluids = fluidInputs.toArray(new FluidStack[0]);
+
+        // all-or-nothing：物品与流体落在两个独立缓冲上，先只读判定能否全部写入，确认后才真正写入。
+        // 只要有一项写不进去就整体拒收且不触碰任何缓冲，让 AE2 在后续 tick 重试该订单；
+        // 若在写不进去时谎报成功，CPU 会把材料判为已交付而不再重推该订单，
+        // 机器却永远等不到材料，形成不可自愈的挂单。
+        if (!slot.canAcceptAll(itemInputs, decodedFluids)) {
+            if (MMCEAdditionConfig.debugPatternAssembly) {
+                MMCEAddition.LOGGER.warn("MEPatternAssembly at {} 拒收配方推送：slot={}，物品 {} 组，流体 {} 组，原因：{}",
+                        getPos(), slotIndex, itemInputs.length, decodedFluids.length,
+                        slot.describeRejection(itemInputs, decodedFluids));
+            }
+            return false;
+        }
+
+        boolean itemsAccepted = slot.pushPattern(itemInputs);
+        boolean fluidsAccepted = decodedFluids.length == 0 || slot.pushPatternFluid(decodedFluids);
+        if (!itemsAccepted || !fluidsAccepted) {
+            // 只读判定通过后写入仍被拒：只可能是判定与写入之间缓冲被外部改动。
+            // 已写入的部分会留在缓冲中不会丢失，重推会多出一份材料
+            // （机器只消耗配方所需份数，多余部分可经 GUI 的"返还全部输入"退回网络），
+            // 这里如实返回 false 并保留调试信息，便于定位异常并发。
+            if (MMCEAdditionConfig.debugPatternAssembly) {
+                MMCEAddition.LOGGER.warn("MEPatternAssembly at {} 推送半途失败：slot={}，物品完整写入={}，流体完整写入={}",
+                        getPos(), slotIndex, itemsAccepted, fluidsAccepted);
+            }
+            return false;
         }
 
         if (MMCEAdditionConfig.debugPatternAssembly) {
             MMCEAddition.LOGGER.debug("MEPatternAssembly at {} pushed pattern into slot {} with {} item inputs, {} fluid inputs",
-                    getPos(), slotIndex, inputs.size(), fluidInputs.size());
+                    getPos(), slotIndex, itemInputs.length, decodedFluids.length);
         }
 
         // 触发控制器立即尝试启动配方
@@ -652,28 +689,38 @@ public class TileMEPatternAssembly extends MEMachineComponent
         // MMCE 2.2.2 的机器事件不投递到 Forge 事件总线，
         // 而是由 MachineEvent.postEvent() → postEventToComponents() 直接调用结构组件的
         // onMachineEvent，因此配方事件必须在此分发（@Mod.EventBusSubscriber 永远收不到）。
-        if (event instanceof RecipeCheckEvent) {
-            RecipeCheckEvent check = (RecipeCheckEvent) event;
-            if (check.phase == Phase.START) {
-                onRecipeCheckStart(check);
-            } else {
-                onRecipeCheckEnd(check);
+        try {
+            if (event instanceof RecipeCheckEvent) {
+                RecipeCheckEvent check = (RecipeCheckEvent) event;
+                if (check.phase == Phase.START) {
+                    onRecipeCheckStart(check);
+                } else {
+                    onRecipeCheckEnd(check);
+                }
+            } else if (event instanceof RecipeStartEvent) {
+                hellfirepvp.modularmachinery.common.crafting.helper.RecipeCraftingContext ctx = ((RecipeStartEvent) event).getContext();
+                onRecipeStart(ctx != null ? ctx.getParentRecipe() : null);
+            } else if (event instanceof RecipeTickEvent) {
+                RecipeTickEvent tick = (RecipeTickEvent) event;
+                hellfirepvp.modularmachinery.common.crafting.helper.RecipeCraftingContext ctx = tick.getContext();
+                if (tick.phase == Phase.START) {
+                    setActiveSlotForRecipe(ctx != null ? ctx.getParentRecipe() : null);
+                } else {
+                    clearActiveSlot();
+                }
+            } else if (event instanceof RecipeFinishEvent) {
+                onRecipeFinish();
+            } else if (event instanceof RecipeFailureEvent) {
+                onRecipeFailure();
             }
-        } else if (event instanceof RecipeStartEvent) {
-            hellfirepvp.modularmachinery.common.crafting.helper.RecipeCraftingContext ctx = ((RecipeStartEvent) event).getContext();
-            onRecipeStart(ctx != null ? ctx.getParentRecipe() : null);
-        } else if (event instanceof RecipeTickEvent) {
-            RecipeTickEvent tick = (RecipeTickEvent) event;
-            hellfirepvp.modularmachinery.common.crafting.helper.RecipeCraftingContext ctx = tick.getContext();
-            if (tick.phase == Phase.START) {
-                setActiveSlotForRecipe(ctx != null ? ctx.getParentRecipe() : null);
-            } else {
-                clearActiveSlot();
-            }
-        } else if (event instanceof RecipeFinishEvent) {
-            onRecipeFinish();
-        } else if (event instanceof RecipeFailureEvent) {
-            onRecipeFailure();
+        } catch (Throwable t) {
+            // 事件处理中途抛异常时，隔离状态会停在"窗口中间"（例如 activeSlotIndex
+            // 刚置位、后续步骤就失败），而 MMCE 不会为异常路径补投 END 事件。
+            // 残留状态会让之后的无事件复核（searchAndStartRecipe → canStartCrafting）
+            // 命中错误槽位，机器陷入持续性闲置，因此这里必须主动清空后再上抛。
+            clearActiveSlot();
+            clearCurrentCraftingSlot();
+            throw t;
         }
     }
 
@@ -714,6 +761,19 @@ public class TileMEPatternAssembly extends MEMachineComponent
 
     // 最近一次配方检查匹配到的 slot（异步搜索线程写入；
     // 主线程在 searchAndStartRecipe 中做无事件的复核时，据此定位到同一个 slot）。
+    //
+    // 已知局限（MMCE 侧行为，本模组无法完全闭合）：
+    // MMCE 的配方检查只在成功时投递 RecipeCheckEvent.END（checkStartResult 在
+    // result.isFailure() 时提前 return），失败路径既不投 END，也没有其它可观察的收尾事件。
+    // 因此异步搜索线程上的 activeSlotIndex 与本字段都可能停留在"最后一次失败的候选"上，
+    // 且在读取侧无法区分——两者由同一次 onRecipeCheckStart 写入同一个值，
+    // 所以本字段不能用来纠正 ThreadLocal；聚合 handler 也拿不到 RecipeCraftingContext，
+    // 无法按"当前配方身份"校验。
+    // 要彻底消除该窗口，需要在 MMCE 失败路径补投 END（或让检查事件携带配方身份）。
+    // 影响面：单次检查内部总会被下一次 onRecipeCheckStart 覆写，只有同一池化线程
+    // 在两次检查之间被读取隔离状态时才会命中陈旧槽位，属低概率窗口。
+    // onMachineEvent 已对事件处理异常做兜底清理，下述热路径的清理点也覆盖了
+    // RecipeFinish / RecipeFailure / 结构更新三条已知的"MMCE 不投 END"路径。
     private volatile int lastCheckedSlot = -1;
 
     /**
@@ -971,6 +1031,120 @@ public class TileMEPatternAssembly extends MEMachineComponent
             }
         }
         return false;
+    }
+
+    /**
+     * 全部样板槽的输入缓冲（物品 + 流体）中是否还有材料。
+     */
+    public boolean hasAnyInput() {
+        for (PatternAssemblySlot slot : slots) {
+            if (!slot.getInputItemBuffer().isEmpty() || !slot.getInputFluidBuffer().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ==================== 输入返还 ====================
+
+    /** AE2 物品/流体存储通道（与 {@link MEAsyncOutputManager} 一致）。 */
+    private static final IItemStorageChannel ITEM_CHANNEL =
+            AEApi.instance().storage().getStorageChannel(IItemStorageChannel.class);
+    private static final IFluidStorageChannel FLUID_CHANNEL =
+            AEApi.instance().storage().getStorageChannel(IFluidStorageChannel.class);
+
+    /**
+     * 把全部样板槽输入缓冲中的物品/流体返还到本方块所在的 ME 网络。
+     * <p>
+     * 供 GUI 的"返还全部输入"按钮调用：把误推入或长期滞留的材料退回网络重新调度。
+     * 注入以本方块的身份（{@link #getSource()}）执行并消耗网络能量，网络拒收的部分
+     * （存储空间不足、能量不足或安全权限拦截）保留在缓冲中，不会丢失。
+     *
+     * @return {@code long[]{已返还物品数, 已返还流体 mB 数}}；未接入或未激活网络时返回 null
+     */
+    @Nullable
+    public long[] returnAllInputsToNetwork() {
+        if (world == null || world.isRemote || !proxy.isActive()) {
+            return null;
+        }
+        IGrid grid;
+        try {
+            grid = proxy.getGrid();
+        } catch (GridAccessException ignored) {
+            return null;
+        }
+        IStorageGrid storage = grid.getCache(IStorageGrid.class);
+        IEnergySource energy = grid.getCache(IEnergyGrid.class);
+        if (storage == null || energy == null) {
+            return null;
+        }
+        IMEMonitor<IAEItemStack> itemMonitor = storage.getInventory(ITEM_CHANNEL);
+        IMEMonitor<IAEFluidStack> fluidMonitor = storage.getInventory(FLUID_CHANNEL);
+
+        long itemsReturned = 0;
+        long fluidsReturned = 0;
+        for (PatternAssemblySlot slot : slots) {
+            itemsReturned += injectInputItems(slot.getInputItemBuffer(), itemMonitor, energy);
+            fluidsReturned += injectInputFluids(slot.getInputFluidBuffer(), fluidMonitor, energy);
+            // 直写缓冲后重建槽位→变体映射，否则 MMCE 仍会看到已被取走的材料
+            slot.getInputItemHandler().syncWithBuffer();
+        }
+        if (itemsReturned > 0 || fluidsReturned > 0) {
+            markDirty();
+        }
+        return new long[]{itemsReturned, fluidsReturned};
+    }
+
+    /**
+     * 把物品缓冲注入网络，返回实际注入数量；网络拒收的部分保留在缓冲中。
+     * 注入逻辑与 {@link MEAsyncOutputManager} 的输出注入一致。
+     */
+    private long injectInputItems(LongItemBuffer buffer, IMEMonitor<IAEItemStack> monitor, IEnergySource energy) {
+        long total = 0;
+        for (Map.Entry<ItemVariant, Long> entry : buffer.snapshot().entrySet()) {
+            ItemVariant variant = entry.getKey();
+            long amount = entry.getValue();
+            if (amount <= 0) {
+                continue;
+            }
+            IAEItemStack toInsert = AEItemStack.fromItemStack(variant.toSingleStack());
+            if (toInsert == null) {
+                continue;
+            }
+            toInsert.setStackSize(amount);
+            IAEItemStack leftover = Platform.poweredInsert(energy, monitor, toInsert, source);
+            long inserted = amount - (leftover == null ? 0 : leftover.getStackSize());
+            if (inserted > 0) {
+                buffer.extract(variant, inserted);
+                total += inserted;
+            }
+        }
+        return total;
+    }
+
+    /**
+     * 把流体缓冲注入网络，返回实际注入 mB 数；网络拒收的部分保留在缓冲中。
+     */
+    private long injectInputFluids(LongFluidBuffer buffer, IMEMonitor<IAEFluidStack> monitor, IEnergySource energy) {
+        long total = 0;
+        for (Map.Entry<net.minecraftforge.fluids.Fluid, Long> entry : buffer.snapshot().entrySet()) {
+            long amount = entry.getValue();
+            if (amount <= 0) {
+                continue;
+            }
+            IAEFluidStack toInsert = AEFluidStack.fromFluidStack(new FluidStack(entry.getKey(), 1));
+            if (toInsert == null) {
+                continue;
+            }
+            toInsert.setStackSize(amount);
+            IAEFluidStack leftover = Platform.poweredInsert(energy, monitor, toInsert, source);
+            long inserted = amount - (leftover == null ? 0 : leftover.getStackSize());
+            if (inserted > 0) {
+                buffer.extract(entry.getKey(), inserted);
+                total += inserted;
+            }
+        }
+        return total;
     }
 
     // ==================== TOP 兼容用状态汇总 ====================

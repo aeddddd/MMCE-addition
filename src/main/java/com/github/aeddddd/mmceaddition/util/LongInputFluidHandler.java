@@ -5,10 +5,14 @@ import net.minecraftforge.fluids.capability.FluidTankProperties;
 import net.minecraftforge.fluids.capability.IFluidHandler;
 import net.minecraftforge.fluids.capability.IFluidTankProperties;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
  * 把 {@link LongFluidBuffer} 包装为 {@link IFluidHandler}，供机器配方消耗流体输入。
+ * <p>
+ * 本类不持有自己的锁：所有读写都委托给 {@link LongFluidBuffer} 的 synchronized 方法
+ * （含只读判定 {@link #wouldAcceptAll}），因此判定与写入遵循与 {@code fill} 相同的同步约定。
  */
 public class LongInputFluidHandler implements IFluidHandler {
 
@@ -54,6 +58,19 @@ public class LongInputFluidHandler implements IFluidHandler {
     @Override
     public int fill(FluidStack resource, boolean doFill) {
         return buffer.fill(resource, doFill);
+    }
+
+    /**
+     * 只读判定：给定的一组流体是否能被本 handler 完整接收（不写入任何内容、不触发观察者）。
+     * <p>
+     * 判定逻辑与锁都在 {@link LongFluidBuffer#wouldAcceptAll(FluidStack[])} 上，
+     * 因此与 {@link #fill} 看到的是同一份状态。
+     *
+     * @param resources 待填充的流体堆（可含 null 与空堆）
+     * @return true 表示全部可完整接收
+     */
+    public boolean wouldAcceptAll(@Nonnull FluidStack[] resources) {
+        return buffer.wouldAcceptAll(resources);
     }
 
     @Nullable

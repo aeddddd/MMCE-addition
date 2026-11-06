@@ -34,7 +34,7 @@ import java.util.Map;
  *       四个独立组件。</li>
  * </ul>
  * <p>
- * 版本兼容（编译期对齐 2.2.2，运行期同时支持 2.3.x）：
+ * 版本兼容（编译期对齐 2.3.2，同一套处理器同时覆盖 2.2.2 与 2.3.x 两条路径）：
  * <ul>
  *   <li>2.2.2：{@code updateComponents(Collection)} —— 见
  *       {@link #mmceaddition$expandComponentsLegacy}；</li>

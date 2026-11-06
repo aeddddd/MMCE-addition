@@ -1,5 +1,6 @@
 package com.github.aeddddd.mmceaddition.virtual;
 
+import com.github.aeddddd.mmceaddition.MMCEAddition;
 import com.github.aeddddd.mmceaddition.config.MMCEAdditionConfig;
 import com.github.aeddddd.mmceaddition.util.ItemVariant;
 import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
@@ -61,9 +62,10 @@ public class TileVirtualAssembler extends TileEntity {
     /**
      * 计算当前缓存槽材料最多可装配的份数。
      * <p>
-     * 升级方块参与替换式抵扣：每条升级定义占据一个结构位置，
-     * 每份装配最多用 1 个升级方块顶替该位置的基础材料，
-     * 因此原料组的有效可用量 = 基础材料 + 该组内升级方块数量。
+     * 升级方块参与替换式抵扣：每条升级定义占据一个结构位置，每份装配每条定义最多顶替 1 个，
+     * 因此装配 k 份时升级方块至多顶替 {@code min(count * k, Σ min(该定义可用量, k))} 件，
+     * 其余需求必须由基础材料补齐（数学细节见 {@link GroupBudget}）。
+     * 本方法与实际消耗共用同一套判定，二者严格一致。
      *
      * @param machineName 机器注册名；null 或无材料清单时返回 0
      */
@@ -76,53 +78,159 @@ public class TileVirtualAssembler extends TileEntity {
         if (groups.isEmpty()) {
             return 0;
         }
-        List<MachineMaterialAnalyzer.UpgradeInfo> upgrades = MachineMaterialAnalyzer.upgradesFor(machine);
+        List<GroupBudget> budgets = buildBudgets(groups, MachineMaterialAnalyzer.upgradesFor(machine));
         // 输出槽剩余空间（int 计数）也是上限之一
-        long room = outputRoom(machineName);
-        if (room <= 0) {
-            return 0;
+        long k = maxAssembleCount(budgets, outputRoom(machineName));
+        return k <= 0 ? 0 : (int) Math.min(k, Integer.MAX_VALUE);
+    }
+
+    /**
+     * 一个原料组的装配预算：基础材料可用量 + 该组每条升级定义的可用量。
+     * <p>
+     * 唯一语义：一份装配需要 {@code count} 件物品，其中最多 {@code R} 件（R = 该组升级定义条数）
+     * 可由升级方块顶替——每条升级定义占据一个结构位置，每份装配每条定义最多顶替 1 个。
+     * 于是装配 k 份时升级方块的顶替上限为
+     * <pre>capacity(k) = min(count * k, Σ_d min(available[d], k))</pre>
+     * 需要的基础材料为 {@code count * k - capacity(k)}（非负）。
+     * 估算（{@link #maxAssemble()}）与实际消耗（{@link #upgradeConsumption(long)} + 基础材料）
+     * 共用同一公式，因此"估算 == 实际可扣"。
+     */
+    private static final class GroupBudget {
+
+        /** 该组的升级定义（下标与 available 对应）。 */
+        private final List<MachineMaterialAnalyzer.UpgradeInfo> upgrades;
+        /** 每条升级定义在缓存槽中的可用量。 */
+        private final long[] available;
+        /** 该组基础材料在缓存槽中的可用量。 */
+        private final long base;
+        /** 该组每份需求数量（结构位置数，恒 ≥ 1）。 */
+        private final int count;
+
+        GroupBudget(List<MachineMaterialAnalyzer.UpgradeInfo> upgrades, long[] available, long base, int count) {
+            this.upgrades = upgrades;
+            this.available = available;
+            this.base = base;
+            this.count = count;
         }
-        long k = Long.MAX_VALUE;
-        for (int i = 0; i < groups.size(); i++) {
-            MachineMaterialAnalyzer.IngredientGroup group = groups.get(i);
-            long base = countAvailable(group);
-            long upgradeAvailable = 0;
-            int replacements = 0;
-            for (MachineMaterialAnalyzer.UpgradeInfo upgrade : upgrades) {
-                if (upgrade.getBaseGroupIndex() == i) {
-                    replacements++;
-                    upgradeAvailable += countAvailableItems(upgrade);
+
+        /** 装配 k 份时升级方块最多能顶替的数量（不超过总需求 count * k）。 */
+        private long upgradeCapacity(long k) {
+            long cap = saturatingMul(count, k);
+            long total = 0;
+            for (long avail : available) {
+                total += Math.min(avail, k);
+                if (total >= cap) {
+                    return cap;
                 }
             }
-            k = Math.min(k, groupAssembleCount(base, upgradeAvailable, replacements, group.getCount()));
-            if (k == 0) {
+            return total;
+        }
+
+        /** 装配 k 份时每条升级定义各顶替多少个（总和等于 {@link #upgradeCapacity(long)}）。 */
+        private long[] upgradeConsumption(long k) {
+            long cap = upgradeCapacity(k);
+            long[] use = new long[available.length];
+            long total = 0;
+            for (int d = 0; d < available.length && total < cap; d++) {
+                long take = Math.min(Math.min(available[d], k), cap - total);
+                use[d] = take;
+                total += take;
+            }
+            return use;
+        }
+
+        /** 装配 k 份的需求是否可被满足（升级顶替 + 基础材料）。 */
+        private boolean canAssemble(long k) {
+            if (k <= 0) {
+                return true;
+            }
+            return saturatingMul(count, k) - upgradeCapacity(k) <= base;
+        }
+
+        /** 该组自身允许的最大装配份数（不含输出槽空间限制）。 */
+        private long maxAssemble() {
+            // 每份至少消耗 1 件物品，故 base + Σavailable 是份数上界；+1 保证二分上界不可行
+            long total = base;
+            for (long avail : available) {
+                total = saturatingAdd(total, avail);
+                if (total == Long.MAX_VALUE) {
+                    return Long.MAX_VALUE;
+                }
+            }
+            if (total <= 0) {
                 return 0;
             }
+            long high = total + 1;
+            long low = 0;
+            while (high - low > 1) {
+                long mid = low + (high - low) / 2;
+                if (canAssemble(mid)) {
+                    low = mid;
+                } else {
+                    high = mid;
+                }
+            }
+            return low;
         }
-        return (int) Math.min(k, room);
+    }
+
+    /** long 加法，溢出时饱和到 {@link Long#MAX_VALUE}（两操作数恒 ≥ 0）。 */
+    private static long saturatingAdd(long a, long b) {
+        long sum = a + b;
+        return sum < 0 ? Long.MAX_VALUE : sum;
+    }
+
+    /** int × long 乘法，溢出时饱和到 {@link Long#MAX_VALUE}。 */
+    private static long saturatingMul(int count, long k) {
+        if (count <= 0 || k <= 0) {
+            return 0;
+        }
+        if (k > Long.MAX_VALUE / count) {
+            return Long.MAX_VALUE;
+        }
+        return (long) count * k;
+    }
+
+    /** 为每个原料组构建装配预算（基础材料可用量 + 该组各升级定义可用量）。 */
+    @Nonnull
+    private List<GroupBudget> buildBudgets(@Nonnull List<MachineMaterialAnalyzer.IngredientGroup> groups,
+                                           @Nonnull List<MachineMaterialAnalyzer.UpgradeInfo> upgrades) {
+        List<GroupBudget> budgets = new java.util.ArrayList<>(groups.size());
+        for (int i = 0; i < groups.size(); i++) {
+            MachineMaterialAnalyzer.IngredientGroup group = groups.get(i);
+            List<MachineMaterialAnalyzer.UpgradeInfo> matched = new java.util.ArrayList<>();
+            for (MachineMaterialAnalyzer.UpgradeInfo upgrade : upgrades) {
+                if (upgrade.getBaseGroupIndex() == i) {
+                    matched.add(upgrade);
+                }
+            }
+            long[] available = new long[matched.size()];
+            for (int d = 0; d < matched.size(); d++) {
+                available[d] = countAvailableItems(matched.get(d));
+            }
+            budgets.add(new GroupBudget(matched, available, countAvailable(group), group.getCount()));
+        }
+        return budgets;
+    }
+
+    /** 各组预算与输出槽空间共同允许的最大装配份数。 */
+    private static long maxAssembleCount(@Nonnull List<GroupBudget> budgets, long room) {
+        long k = Math.max(0, room);
+        for (GroupBudget budget : budgets) {
+            k = Math.min(k, budget.maxAssemble());
+            if (k == 0) {
+                break;
+            }
+        }
+        return k;
     }
 
     /**
-     * 单个原料组的可装配份数。
-     * 每份需要 count 件物品，其中最多 R 件可由升级方块顶替（每位置每份 1 个）。
-     */
-    private static long groupAssembleCount(long base, long upgradeAvailable, int replacements, int count) {
-        if (replacements == 0 || upgradeAvailable == 0) {
-            return base / count;
-        }
-        if (count <= replacements) {
-            // 该组可被升级全覆盖（极端），不构成限制
-            return Long.MAX_VALUE / count;
-        }
-        long boundary = upgradeAvailable / replacements;
-        if (base / (count - replacements) < boundary) {
-            return base / (count - replacements);
-        }
-        return (base + upgradeAvailable) / count;
-    }
-
-    /**
-     * 执行装配：消耗 k 份材料（升级方块优先替换式顶替并记录），产出/合并机器数据。
+     * 执行装配：先做一次可行性校验（不写缓存槽），确认 k 份真的扣得起后再逐组足额消耗，
+     * 产出/合并机器数据。
+     * <p>
+     * 可行性判定与实际消耗共用 {@link GroupBudget}，因此校验通过即意味着消耗必然足额，
+     * 不需要回滚逻辑；消耗结束时仍保留一道不变量守卫。
      *
      * @return 实际装配份数；0 表示失败
      */
@@ -138,29 +246,38 @@ public class TileVirtualAssembler extends TileEntity {
         if (groups.isEmpty()) {
             return 0;
         }
-        List<MachineMaterialAnalyzer.UpgradeInfo> upgrades = MachineMaterialAnalyzer.upgradesFor(machine);
-        int maxK = getAssembleCount(machineName);
-        int actual = Math.min(k, maxK);
+        List<GroupBudget> budgets = buildBudgets(groups, MachineMaterialAnalyzer.upgradesFor(machine));
+        long actual = Math.min(k, maxAssembleCount(budgets, outputRoom(machineName)));
         if (actual <= 0) {
             return 0;
         }
 
-        // 消耗材料：先按升级定义替换式顶替（每位置每份 1 个），剩余用基础材料
+        // 先校验（不改动缓存槽）：估算与实际消耗共用同一判定，校验通过则消耗必然足额
+        for (GroupBudget budget : budgets) {
+            if (!budget.canAssemble(actual)) {
+                MMCEAddition.LOGGER.error("虚拟装配: 机器 {} 的 {} 份材料校验失败，已中止（材料守恒守卫）",
+                        machineName, actual);
+                return 0;
+            }
+        }
+
+        // 消耗材料：升级方块按定义优先替换式顶替（每位置每份 1 个），剩余用基础材料
         java.util.Map<String, Integer> recorded = new java.util.LinkedHashMap<>();
         for (int i = 0; i < groups.size(); i++) {
             MachineMaterialAnalyzer.IngredientGroup group = groups.get(i);
-            long need = (long) group.getCount() * actual;
-            for (MachineMaterialAnalyzer.UpgradeInfo upgrade : upgrades) {
-                if (upgrade.getBaseGroupIndex() != i || need <= 0) {
+            GroupBudget budget = budgets.get(i);
+            long[] upgradeUse = budget.upgradeConsumption(actual);
+            long upgraded = 0;
+            for (int d = 0; d < upgradeUse.length; d++) {
+                if (upgradeUse[d] <= 0) {
                     continue;
                 }
-                int use = (int) Math.min(actual, countAvailableItems(upgrade));
-                if (use > 0) {
-                    consumeItems(upgrade, use);
-                    recorded.merge(upgrade.getModifierName(), use, Integer::sum);
-                    need -= use;
-                }
+                MachineMaterialAnalyzer.UpgradeInfo upgrade = budget.upgrades.get(d);
+                long consumed = consumeItems(upgrade, upgradeUse[d]);
+                upgraded += consumed;
+                recorded.merge(upgrade.getModifierName(), (int) consumed, Integer::sum);
             }
+            long need = (long) group.getCount() * actual - upgraded;
             for (int slot = 0; slot < buffer.getSlots() && need > 0; slot++) {
                 ItemStack stack = buffer.stacks[slot];
                 if (stack.isEmpty() || !group.accepts(stack)) {
@@ -173,11 +290,17 @@ public class TileVirtualAssembler extends TileEntity {
                 }
                 need -= take;
             }
+            // 不变量守卫：先校验后消耗使此分支不可达，保留以防日后改动破坏守恒
+            if (need > 0) {
+                MMCEAddition.LOGGER.error("虚拟装配: 机器 {} 第 {} 组材料消耗不足（缺 {} 件），已中止（材料守恒守卫）",
+                        machineName, i, need);
+                return 0;
+            }
         }
 
         // 产出/合并机器数据（数量与升级记录都合并）
         if (output.stack.isEmpty()) {
-            output.stack = ItemMachineData.createStack(machineName, actual);
+            output.stack = ItemMachineData.createStack(machineName, (int) actual);
         } else {
             long merged = (long) ItemMachineData.getCount(output.stack) + actual;
             ItemMachineData.setCount(output.stack, (int) Math.min(merged, Integer.MAX_VALUE));
@@ -193,7 +316,7 @@ public class TileVirtualAssembler extends TileEntity {
             ItemMachineData.addUpgradeParallelism(output.stack, snapshot);
         }
         markDirty();
-        return actual;
+        return (int) actual;
     }
 
     /** 输出槽可容纳的额外数量（同机器数据才可合并）。 */
@@ -232,8 +355,8 @@ public class TileVirtualAssembler extends TileEntity {
         return total;
     }
 
-    /** 从缓存槽消耗某升级定义的方块。 */
-    private void consumeItems(MachineMaterialAnalyzer.UpgradeInfo upgrade, int amount) {
+    /** 从缓存槽消耗某升级定义的方块；返回实际消耗量（不足时小于 amount）。 */
+    private long consumeItems(MachineMaterialAnalyzer.UpgradeInfo upgrade, long amount) {
         long need = amount;
         for (int slot = 0; slot < buffer.getSlots() && need > 0; slot++) {
             ItemStack stack = buffer.stacks[slot];
@@ -247,6 +370,7 @@ public class TileVirtualAssembler extends TileEntity {
             }
             need -= take;
         }
+        return amount - need;
     }
 
     // ==================== Capability ====================

@@ -1,0 +1,25 @@
+{
+    "result": {
+        "item": "mmceaddition:virtual_parallel_hatch"
+    },
+    "pattern": [
+        " d ",
+        "rmr",
+        " d "
+    ],
+    "type": "forge:ore_shaped",
+    "key": {
+        "d": {
+            "type": "forge:ore_dict",
+            "ore": "dustRedstone"
+        },
+        "r": {
+            "type": "forge:ore_dict",
+            "ore": "blockRedstone"
+        },
+        "m": {
+            "item": "modularmachinery:blockcasing",
+            "data": 0
+        }
+    }
+}

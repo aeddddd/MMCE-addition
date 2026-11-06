@@ -273,7 +273,15 @@ public final class RecipeOutputSummator {
 
     private static Field fTypeComponents;
     private static Field fIngredients;
-    private static boolean reflectInit;
+    /**
+     * 反射是否已初始化。volatile：本方法可能在 AE 合成线程被首次触发，
+     * 而字段随后要在服务端主线程读取，必须保证可见性。
+     * <p>
+     * 注意赋值顺序：先写完两个 {@link Field}，最后才置位本标志。
+     * volatile 写是释放屏障，读方看到 {@code true} 时必然也能看到字段赋值，
+     * 否则会出现"以为初始化完成、实际字段还是 null"而静默跳过加和的情况。
+     */
+    private static volatile boolean reflectInit;
 
     private static List<ProcessingComponent<?>> findValidComponents(RecipeCraftingContext ctx,
                                                                     ComponentRequirement<?, ?> req) {
@@ -337,7 +345,6 @@ public final class RecipeOutputSummator {
         if (reflectInit) {
             return;
         }
-        reflectInit = true;
         try {
             fTypeComponents = RecipeCraftingContext.class.getDeclaredField("typeComponents");
             fTypeComponents.setAccessible(true);
@@ -350,6 +357,8 @@ public final class RecipeOutputSummator {
         } catch (Throwable ignored) {
             fIngredients = null;
         }
+        // 必须最后置位：volatile 写是释放屏障，保证读到 true 的线程也能看到上面两个字段的赋值。
+        reflectInit = true;
     }
 
     private static boolean isBlacklisted(DynamicMachine machine) {
